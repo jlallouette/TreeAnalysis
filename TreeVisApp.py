@@ -89,11 +89,11 @@ class TreePlotter(Parameterizable, Usable, DashInterfacable):
 
 		self.pltFig = tls.mpl_to_plotly(fig)
 
-		if hasattr(self.treeGenerator, 'rf'):
+		if hasattr(self.treeGenerator, 'birth_rf'):
 			times = np.arange(0, self.maxTime, self.maxTime / 100)
 			fig, ax = plt.subplots()
 			for node in allNodes:
-				rate = [self.treeGenerator.rf.getRate(node, tm) for tm in times]
+				rate = [self.treeGenerator.birth_rf.getRate(node, tm, total_time=tm) for tm in times]
 				ax.plot(times, rate)
 			self.rateFig = tls.mpl_to_plotly(fig)
 
@@ -119,7 +119,8 @@ app.layout = html.Div(children = [
 		treePlt.GetLayout()
 	])
 
-anyChangeCallBacks = {(treePlt._getElemId('special', 'innerLayout'), 'children'):treePlt.updateInnerLayout}
+#anyChangeCallBacks = {(treePlt._getElemId('special', 'innerLayout'), 'children'):treePlt.updateInnerLayout}
+anyChangeCallBacks = {}
 treePlt.BuildAllSignals(app, anyChangeCallBacks)
 
 app.run_server(debug=True)

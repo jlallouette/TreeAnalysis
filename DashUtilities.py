@@ -202,6 +202,7 @@ class DashInterfacable(Interfacable):
 
 	# Returns the current layout
 	def GetLayout(self, hideParams = False, hideUsage = False, hideFull = False):
+		print('getting Layout for {}'.format(self))
 		params = []
 		uses = []
 		defaultTypes = [str, int, bool, float, tuple, range]

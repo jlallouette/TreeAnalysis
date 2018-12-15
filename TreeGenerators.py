@@ -39,12 +39,12 @@ class NonNeutralTreeGenerator(TreeGenerator):
 
 	def GetDefaultParams(self):
 		return ParametersDescr({
-			'rf' : (TraitEvolLinearBrownian(), NonNeutralRateFunction)
+			'birth_rf' : (TraitEvolLinearBrownian(), NonNeutralRateFunction)
 		})
 		
 	def generate(self, num_extant_tips):
-		epsilon = 0.00001 / self.rf.getHighestPosisbleRate() / num_extant_tips
-		self.rf.updateValues()
+		epsilon = 0.00001 / self.birth_rf.getHighestPosisbleRate() / num_extant_tips
+		self.birth_rf.updateValues()
 
 		taxon_namespace = dendropy.TaxonNamespace()
 		tree = dendropy.Tree(taxon_namespace=taxon_namespace)
@@ -61,8 +61,8 @@ class NonNeutralTreeGenerator(TreeGenerator):
 			eventProb = 0
 			# Determine the time of the next event
 			while noEvent:
-				minNextChange = min(self.rf.getNextChange(n, n.edge.length + localTime) for n in extant_tips)
-				eventProb = sum(self.rf.getRate(n, n.edge.length + localTime) for n in extant_tips)
+				minNextChange = min(self.birth_rf.getNextChange(n, n.edge.length + localTime, total_time=total_time+localTime) for n in extant_tips)
+				eventProb = sum(self.birth_rf.getRate(n, n.edge.length + localTime, total_time=total_time+localTime) for n in extant_tips)
 				waiting_time = random.expovariate(eventProb)
 				localTime += min(waiting_time, minNextChange + epsilon)
 				noEvent = waiting_time > minNextChange
@@ -70,14 +70,14 @@ class NonNeutralTreeGenerator(TreeGenerator):
 			# add waiting time to nodes
 			for nd in extant_tips:
 				try:
-					nd.edge.length += waiting_time
+					nd.edge.length += localTime
 				except TypeError:
-					nd.edge.length = waiting_time
-			total_time += waiting_time
+					nd.edge.length = localTime
+			total_time += localTime
 
-			# Determine in which branch will the even happen
+			# Determine in which branch will the event happen
 			event_nodes = [n for n in extant_tips]
-			event_rates = [self.rf.getRate(n, n.edge.length) / eventProb for n in event_nodes]
+			event_rates = [self.birth_rf.getRate(n, n.edge.length, total_time=total_time) / eventProb for n in event_nodes]
 			nd = probability.weighted_choice(event_nodes, event_rates, rng=random)
 
 			# Branch
@@ -105,11 +105,11 @@ class NonNeutralRateFunction(Parameterizable, DashInterfacable):
 		DashInterfacable.__init__(self)
 
 	@abstractmethod
-	def getRate(self, node, time):
+	def getRate(self, node, time, **kwargs):
 		pass
 
 	@abstractmethod
-	def getNextChange(self, node, time):
+	def getNextChange(self, node, time, **kwargs):
 		pass
 
 	@abstractmethod
@@ -128,10 +128,10 @@ class ExplosiveRadiationRateFunc(NonNeutralRateFunction):
 			'lowRate' : (0.01,)
 		})
 
-	def getRate(self, node, time):
+	def getRate(self, node, time, **kwargs):
 		return self.basalRate if time <= self.timeDelay else self.lowRate
 	
-	def getNextChange(self, node, time):
+	def getNextChange(self, node, time, **kwargs):
 		return self.timeDelay - time if time <= self.timeDelay else math.inf
 
 	def getHighestPosisbleRate(self):
@@ -145,7 +145,7 @@ class TraitEvolLinearBrownian(NonNeutralRateFunction):
 			'lowestRate' : (0.01,)
 		})
 
-	def getRate(self, node, time):
+	def getRate(self, node, time, **kwargs):
 		if hasattr(node, 'traitVal'):
 			return node.traitVal
 		else:
@@ -155,7 +155,7 @@ class TraitEvolLinearBrownian(NonNeutralRateFunction):
 				node.traitVal = max(self.lowestRate, node.parent_node.traitVal + np.random.normal(0, self.sigma))
 			return node.traitVal
 
-	def getNextChange(self, node, time):
+	def getNextChange(self, node, time, **kwargs):
 		return math.inf
 
 	def getHighestPosisbleRate(self):
@@ -174,13 +174,13 @@ class ExtendedExplRadRateFunc(NonNeutralRateFunction):
 			'lowRate' : (0.01,)
 		})
 
-	def getRate(self, node, time):
+	def getRate(self, node, time, **kwargs):
 		ind = 0
 		while ind < len(self.stepTimes) and time > self.stepTimes[ind]:
 			ind += 1
 		return (self.basalRate-self.lowRate)*(len(self.stepTimes) - ind)/(len(self.stepTimes)) + self.lowRate
 
-	def getNextChange(self, node, time):
+	def getNextChange(self, node, time, **kwargs):
 		ind = 0
 		while ind < len(self.stepTimes) and time > self.stepTimes[ind]:
 			ind += 1
@@ -192,5 +192,33 @@ class ExtendedExplRadRateFunc(NonNeutralRateFunction):
 	def updateValues(self):
 		self.stepTimes = [self.endDelay * ((i+1) / self.nbSteps) for i in range(self.nbSteps)]
 		
+class PhaseBirthRateFunc(NonNeutralRateFunction):
+	def __init__(self):
+		NonNeutralRateFunction.__init__(self)
+		self.stepVals = []
+		self.actualFunc = lambda x:x
+	
+	def GetDefaultParams(self):
+		return ParametersDescr({
+			'period' : (10,),
+			'nbSteps' : (10, int),
+			'maxRate' : (1.0,),
+			'minRate' : (0.01,),
+			'periodFunc' : ('lambda t:(1+math.sin(t*2*math.pi))/2',)
+		})
+
+	def updateValues(self):
+		self.actualFunc = eval(self.periodFunc)
+		self.stepVals = [self.actualFunc(i/self.nbSteps)*(self.maxRate-self.minRate) + self.minRate for i in range(self.nbSteps)]
+
+	def getRate(self, node, time, total_time = 0, **kwargs):
+		rateInd = int(total_time*self.nbSteps/self.period) % self.nbSteps
+		return self.stepVals[rateInd]
+
+	def getNextChange(self, node, time, total_time = 0, **kwargs):
+		return (int(total_time*self.nbSteps/self.period) + 1) * self.period / self.nbSteps - total_time
+
+	def getHighestPosisbleRate(self):
+		return self.maxRate
 	
 

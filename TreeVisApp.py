@@ -73,7 +73,8 @@ class TreePlotter(Parameterizable, Usable, DashInterfacable):
 		return ParametersDescr({
 			'tree_size' : (20, int),
 			'treeGenerator' : (NeutralTreeGenerator(), TreeGenerator),
-			'maxTime' : (20.0, float)
+			'maxTime' : (20.0, float),
+			'autoUpdate': (False, bool)
 		})
 
 	@Usable.Clickable
@@ -108,7 +109,8 @@ class TreePlotter(Parameterizable, Usable, DashInterfacable):
 			return html.Div(children='lol')
 
 	def updateInnerLayout(self, *values):
-		self.Plot()
+		if self.autoUpdate:
+			self.Plot()
 		return self._getInnerLayout()
 
 treePlt = TreePlotter()

@@ -1,6 +1,6 @@
 import dash_core_components as dcc
 import dash_html_components as html
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 
 from Utilities import *
 
@@ -104,6 +104,9 @@ class DashInterfacable(Interfacable):
 	def _setCustomLayout(self, name, layout):
 		self._customLayouts[name] = layout
 
+	def _getDropDownValName(self, av, cls, defaultTypes):
+		return str(av) if cls in defaultTypes else av.__name__
+
 	# Generate the callback function that will be called upon modifications of fields
 	def _generateFieldCallback(self):
 		def UpdateValues(*values):
@@ -150,13 +153,19 @@ class DashInterfacable(Interfacable):
 			return fullLayout.children
 		return CallMethods
 
-	def _generateDropDownCallback(self, ddd):
-		def UpdateDropDown(value):
-			subLayouts = []
-			for key in ddd.allSavkKeys:
-				currObj = self.subAuthValsObj[key]
-				subLayouts.append(currObj.GetLayout(hideFull = (type(currObj).__name__ != value)))
-			return subLayouts
+	#def _generateDropDownCallback(self, ddd):
+	#	def UpdateDropDown(value):
+	#		subLayouts = []
+	#		for key in ddd.allSavkKeys:
+	#			currObj = self.subAuthValsObj[key]
+	#			subLayouts.append(currObj.GetLayout(hideFull = (type(currObj).__name__ != value)))
+	#		return subLayouts
+	#	return UpdateDropDown
+
+	def _generateDropDownCallback(self, obj):
+		def UpdateDropDown(value, style):
+			style['display'] = 'block' if value == obj.__class__.__name__ else 'none'
+			return style
 		return UpdateDropDown
 
 	def _generateAnyChangeCallback(self, acc):
@@ -177,9 +186,15 @@ class DashInterfacable(Interfacable):
 
 		# Then handle signals tied to dropdowns
 		for ddd in self._dropDownData:
-			app.callback(Output(ddd.divId, 'children'), [Input(ddd.id, ddd.fieldName)])(self._generateDropDownCallback(ddd))
-
-			anyChangeInputs.append(Input(ddd.divId, 'children'))
+			for key in ddd.allSavkKeys:
+				obj = self.subAuthValsObj[key]
+				outId = obj._getElemId('special', 'all')
+				app.callback(Output(outId, 'style'), [Input(ddd.id, ddd.fieldName)], [State(outId, 'style')])(self._generateDropDownCallback(obj))
+				anyChangeInputs.append(Input(outId, 'style'))
+#		for ddd in self._dropDownData:
+#			app.callback(Output(ddd.divId, 'children'), [Input(ddd.id, ddd.fieldName)])(self._generateDropDownCallback(ddd))
+#
+#			anyChangeInputs.append(Input(ddd.divId, 'children'))
 
 		# Then handle action signals
 		allInputs = [Input(ud.id, ud.fieldName) for ud in self._useData]
@@ -231,13 +246,13 @@ class DashInterfacable(Interfacable):
 				if authVals is not None:
 					if (cls in defaultTypes and currVal not in authVals) or (cls not in defaultTypes and currVal.__class__ not in authVals):
 						raise ValueError('{} is not part of the authorized values: {}'.format(currVal, authVals))
-					strValName = lambda av: str(av) if cls in defaultTypes else av.__name__
 					params.append(
 						html.Div([
 						html.Label(name),
 						dcc.Dropdown(
 							id = elemId,
-							options=[{'label': strValName(av), 'value': strValName(av)} for av in authVals], 
+							options=[{'label': self._getDropDownValName(av, cls, defaultTypes),
+									'value': self._getDropDownValName(av, cls, defaultTypes)} for av in authVals], 
 							value=currVal if cls in defaultTypes else currVal.__class__.__name__,
 							clearable=False
 						)]))

@@ -153,15 +153,6 @@ class DashInterfacable(Interfacable):
 			return fullLayout.children
 		return CallMethods
 
-	#def _generateDropDownCallback(self, ddd):
-	#	def UpdateDropDown(value):
-	#		subLayouts = []
-	#		for key in ddd.allSavkKeys:
-	#			currObj = self.subAuthValsObj[key]
-	#			subLayouts.append(currObj.GetLayout(hideFull = (type(currObj).__name__ != value)))
-	#		return subLayouts
-	#	return UpdateDropDown
-
 	def _generateDropDownCallback(self, obj):
 		def UpdateDropDown(value, style):
 			style['display'] = 'block' if value == obj.__class__.__name__ else 'none'
@@ -191,10 +182,6 @@ class DashInterfacable(Interfacable):
 				outId = obj._getElemId('special', 'all')
 				app.callback(Output(outId, 'style'), [Input(ddd.id, ddd.fieldName)], [State(outId, 'style')])(self._generateDropDownCallback(obj))
 				anyChangeInputs.append(Input(outId, 'style'))
-#		for ddd in self._dropDownData:
-#			app.callback(Output(ddd.divId, 'children'), [Input(ddd.id, ddd.fieldName)])(self._generateDropDownCallback(ddd))
-#
-#			anyChangeInputs.append(Input(ddd.divId, 'children'))
 
 		# Then handle action signals
 		allInputs = [Input(ud.id, ud.fieldName) for ud in self._useData]

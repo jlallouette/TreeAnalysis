@@ -71,7 +71,7 @@ class DashInterfacable(Interfacable):
 	def __init__(self):
 		self.subAuthValsObj = {}
 		self._fullDivId = self._getElemId('special', 'all')
-		self._uselessDivIds = {name:self._getElemId('special', 'uselessDiv'+name) for name in ['use', 'all']}
+		self._uselessDivIds = {name:self._getElemId('special', 'uselessDiv'+name) for name in ['use', 'all', 'anyParamChange']}
 
 		self._fillFieldData = True
 		self._fieldData = []
@@ -159,15 +159,27 @@ class DashInterfacable(Interfacable):
 			return subLayouts
 		return UpdateDropDown
 
+	def _generateAnyChangeCallback(self, acc):
+		def AnyChangeCB(*values):
+			return acc(values)
+		return AnyChangeCB
+
 	# Bind all signals
-	def BuildAllSignals(self, app, anyChangeCallBack = None):
+	# anyChangeCallBacks should be a dict of (outputId, outputField) -> callBackFunction that returns what to put there
+	def BuildAllSignals(self, app, anyChangeCallBacks = {}):
+		anyChangeInputs = []
+
 		# First handle signals linked with own fields
 		allInputs = [Input(fd.id, fd.fieldName) for fd in self._fieldData]
 		app.callback(Output(self._uselessDivIds['all'], 'children'), allInputs)(self._generateFieldCallback())
 
+		anyChangeInputs.append(Input(self._uselessDivIds['all'], 'children'))
+
 		# Then handle signals tied to dropdowns
 		for ddd in self._dropDownData:
 			app.callback(Output(ddd.divId, 'children'), [Input(ddd.id, ddd.fieldName)])(self._generateDropDownCallback(ddd))
+
+			anyChangeInputs.append(Input(ddd.divId, 'children'))
 
 		# Then handle action signals
 		allInputs = [Input(ud.id, ud.fieldName) for ud in self._useData]
@@ -175,7 +187,14 @@ class DashInterfacable(Interfacable):
 
 		# Then treat signals of parameters sublayouts
 		for name, obj in self.subAuthValsObj.items():
-			obj.BuildAllSignals(app, anyChangeCallBack)
+			obj.BuildAllSignals(app)
+
+			anyChangeInputs.append(Input(obj._uselessDivIds['anyParamChange'], 'children'))
+
+		# Bind signals to detect any change in parameters or subparameters
+		app.callback(Output(self._uselessDivIds['anyParamChange'], 'children'), anyChangeInputs)(lambda *x:'')
+		for key, callBack in anyChangeCallBacks.items():
+			app.callback(Output(key[0], key[1]), anyChangeInputs)(self._generateAnyChangeCallback(callBack))
 
 		# Build inner layout signals
 		self._buildInnerLayoutSignals()
@@ -183,7 +202,6 @@ class DashInterfacable(Interfacable):
 
 	# Returns the current layout
 	def GetLayout(self, hideParams = False, hideUsage = False, hideFull = False):
-		print('getting layout')
 		params = []
 		uses = []
 		defaultTypes = [str, int, bool, float, tuple, range]
@@ -268,7 +286,7 @@ class DashInterfacable(Interfacable):
 					self._useData.append(DashUseData(elemId, 'n_clicks', self, func))
 
 		# Then display inner layout if it exists
-		innerElem = self._getInnerLayout()
+		innerElem = html.Div(self._getInnerLayout(), id=self._getElemId('special', 'innerLayout'))
 
 		# Build Final Layout
 		# TODO Write different layout arrangements

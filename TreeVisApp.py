@@ -107,13 +107,18 @@ class TreePlotter(Parameterizable, Usable, DashInterfacable):
 		else:
 			return html.Div(children='lol')
 
+	def updateInnerLayout(self, *values):
+		self.Plot()
+		return self._getInnerLayout()
+
 treePlt = TreePlotter()
 
 app.layout = html.Div(children = [
 		treePlt.GetLayout()
 	])
 
-treePlt.BuildAllSignals(app)
+anyChangeCallBacks = {(treePlt._getElemId('special', 'innerLayout'), 'children'):treePlt.updateInnerLayout}
+treePlt.BuildAllSignals(app, anyChangeCallBacks)
 
 app.run_server(debug=True)
 

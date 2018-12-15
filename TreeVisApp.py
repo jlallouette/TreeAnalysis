@@ -90,9 +90,10 @@ class TreePlotter(Parameterizable, Usable, DashInterfacable):
 
 		if hasattr(self.treeGenerator, 'rf'):
 			times = np.arange(0, self.maxTime, self.maxTime / 100)
-			rate = [self.treeGenerator.rf.getRate(allNodes[0], tm) for tm in times]
 			fig, ax = plt.subplots()
-			ax.plot(times, rate)
+			for node in allNodes:
+				rate = [self.treeGenerator.rf.getRate(node, tm) for tm in times]
+				ax.plot(times, rate)
 			self.rateFig = tls.mpl_to_plotly(fig)
 
 	def _getInnerLayout(self):

@@ -2,9 +2,10 @@ import pickle
 import os
 from Utilities import *
 
-def LoadSimulations(fname):
-	with open(fname, 'rb') as f:
-		return pickle.load(f)
+# TODO Remove?
+#def LoadSimulations(fname):
+#	with open(fname, 'rb') as f:
+#		return pickle.load(f)
 
 class SimulationManager:
 	def __init__(self, fname = 'Simulations.pkl'):
@@ -23,7 +24,7 @@ class SimulationManager:
 		self.SaveSimulations()
 
 	def GetKeyTuple(self, simRunner):
-		return (type(simRunner).__name__,) + simRunner.params.GetKeyTuple()
+		return (type(simRunner).__name__,) + simRunner.GetParamKeyTuple()
 
 	def GetSimulationResult(self, simRunner):
 		kt = self.GetKeyTuple(simRunner)
@@ -34,6 +35,10 @@ class SimulationManager:
 
 # Interface for simulation runner classes
 class SimulationRunner(Parameterizable, Usable):
+	def __init__(self):
+		Parameterizable.__init__(self)
+		Usable.__init__(self)
+
 	# returns a result object
 	@abstractmethod
 	def Simulate(self):

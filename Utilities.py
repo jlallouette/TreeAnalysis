@@ -55,6 +55,10 @@ class Parameterizable(ABC):
 		else:
 			raise NotImplementedError()
 
+	def GetParamKeyTuple(self):
+		newParam = Parameters(**{name:getattr(self, name) for name in self.GetDefaultParams().description.keys()})
+		return newParam.GetKeyTuple()
+
 	def GetDefaultParams(self):
 		return ParametersDescr()
 
@@ -84,17 +88,16 @@ class Usable(ABC):
 
 # Wraps results from a simulation
 class Results(object):
-	pass # TODO
+	def __add__(self, other):
+		res = Results()
+		for name, val in self.__dict__.items():
+			setattr(res, name, val)
+		for name, val in other.__dict__.items():
+			if not hasattr(self, name):
+				setattr(res, name, val)
+			else:
+				raise Exception('Name collision in Results object: {}'.format(name))
+		return res
+		
 
-# Plotter ABC
-class ResultPlotter(Parameterizable):
-	def __init__(self, results, params = None):
-		super(ResultPlotter, self).__init__(params)
-		for name, val in results.__dict__.items():
-			setattr(self, name, val)
-
-	# Returns a list of axes
-	@abstractmethod
-	def Plot(self):
-		pass
 

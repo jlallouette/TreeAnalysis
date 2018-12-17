@@ -91,7 +91,7 @@ class DashInterfacable(Interfacable):
 		return None
 
 	# Overload this method to build the signals of the inner layout
-	def _buildInnerLayoutSignals(self):
+	def _buildInnerLayoutSignals(self, app):
 		return None
 
 	def _getCustomLayout(self, name):
@@ -199,7 +199,7 @@ class DashInterfacable(Interfacable):
 			app.callback(Output(key[0], key[1]), anyChangeInputs)(self._generateAnyChangeCallback(callBack))
 
 		# Build inner layout signals
-		self._buildInnerLayoutSignals()
+		self._buildInnerLayoutSignals(app)
 						
 
 	# Returns the current layout

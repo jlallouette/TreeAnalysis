@@ -10,6 +10,14 @@ import plotly.plotly as py
 import plotly.tools as tls
 import numpy as np
 
+#TMP
+import json
+
+#external_stylesheets = [
+#    "https://unpkg.com/tachyons@4.10.0/css/tachyons.min.css"]
+
+#app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+
 app = dash.Dash(__name__)
 
 leafWidth = 1
@@ -49,8 +57,13 @@ class NodePlot:
 
 	def plot(self, ax, clade):
 		if len(self.children) > 0:
-			ax.plot([self.time, self.time], [self.brLeft, self.brRight], 'b')
-		ax.plot(self.time, self.xpos, 'ro' if self.node != clade else 'go')
+			#ax.plot([self.time, self.time], [self.brLeft, self.brRight], 'b')
+			ax.plot([self.children[0].time, self.time, self.time, self.children[1].time], [self.children[0].xpos, self.brLeft, self.brRight, self.children[1].xpos], 'b', label='test')
+		else:
+			ax.plot(self.time, self.xpos, 'ro')
+		ax.plot(self.time, self.xpos, 'ro' if self.node != clade else 'go', label='omg')
+		if hasattr(self.node, 'traitVal'):
+			ax.text(self.time, self.xpos, str(self.node.traitVal))
 		for c in self.children:
 			ax.plot([self.time, c.time], [c.xpos, c.xpos], 'b')
 			c.plot(ax, clade)
@@ -79,30 +92,31 @@ class TreePlotter(Parameterizable, Usable, DashInterfacable):
 
 	@Usable.Clickable
 	def Plot(self):
-		t = self.treeGenerator.generate(self.tree_size)
-		allNodes = t.internal_nodes(exclude_seed_node = True)
+		self.t = self.treeGenerator.generate(self.tree_size)
+		self.allNodes = list(self.t.preorder_node_iter())#internal_nodes(exclude_seed_node = False)
 
 		fig, ax = plt.subplots()
-		tp = NodePlot(t.seed_node)
+		tp = NodePlot(self.t.seed_node)
 		tp.computePos()
 		tp.plot(ax, None)
+		fig.legend()
 
 		self.pltFig = tls.mpl_to_plotly(fig)
 
 		if hasattr(self.treeGenerator, 'birth_rf'):
 			times = np.arange(0, self.maxTime, self.maxTime / 100)
 			fig, ax = plt.subplots()
-			for node in allNodes:
+			for node in self.allNodes:
 				rate = [self.treeGenerator.birth_rf.getRate(node, tm, total_time=tm) for tm in times]
 				ax.plot(times, rate)
 			self.rateFig = tls.mpl_to_plotly(fig)
 
 	def _getInnerLayout(self):
 		figs = []
-		if self.rateFig is not None:
-			figs.append(dcc.Graph(figure=self.rateFig))
-		if self.pltFig is not None:
-			figs.append(dcc.Graph(figure=self.pltFig))
+		#if self.rateFig is not None:
+		figs.append(dcc.Graph(id='rateFig', figure=self.rateFig if self.rateFig is not None else {}))
+		#if self.pltFig is not None:
+		figs.append(dcc.Graph(id='treeFig', figure=self.pltFig if self.pltFig is not None else {}))
 		if len(figs) > 0:
 			return DashHorizontalLayout().GetLayout(figs)
 		else:
@@ -116,12 +130,49 @@ class TreePlotter(Parameterizable, Usable, DashInterfacable):
 treePlt = TreePlotter()
 
 app.layout = html.Div(children = [
-		treePlt.GetLayout()
+		treePlt.GetLayout(),
+		# TMP
+		html.Pre(id='tmpTxt1'),
+		html.Pre(id='tmpTxt2')
+		# END TMP
 	])
 
 #anyChangeCallBacks = {(treePlt._getElemId('special', 'innerLayout'), 'children'):treePlt.updateInnerLayout}
 anyChangeCallBacks = {}
 treePlt.BuildAllSignals(app, anyChangeCallBacks)
+
+# TMP
+@app.callback(Output('tmpTxt1', 'children'), [Input('rateFig', 'hoverData')])
+def treatHoverData(hoverData):
+	return json.dumps(hoverData, indent=2)
+
+@app.callback(Output('rateFig', 'figure'), [Input('treeFig', 'hoverData')])
+def treatHoverData(hoverData):
+	if hasattr(treePlt.treeGenerator, 'birth_rf'):
+		times = np.arange(0, treePlt.maxTime, treePlt.maxTime / 100)
+		fig, ax = plt.subplots()
+		try:
+			cn = (hoverData['points'][0]['curveNumber']-1)//3
+			#cn = hoverData['points'][0]['curveNumber']//2
+		except:
+			cn = 0
+		if hasattr(treePlt, 'allNodes'):
+			for i, node in enumerate(treePlt.allNodes):
+				rate = [treePlt.treeGenerator.birth_rf.getRate(node, tm, total_time=tm) for tm in times]
+				if cn != i:
+					ax.plot(times, rate, color='gray')
+				ax.text(i, rate[0], str(i))
+			rate = [treePlt.treeGenerator.birth_rf.getRate(treePlt.allNodes[cn], tm, total_time=tm) for tm in times]
+			ax.plot(times, rate, color='red', linewidth=2)
+			treePlt.rateFig = tls.mpl_to_plotly(fig)
+
+	return treePlt.rateFig#json.dumps(hoverData, indent=2)
+
+
+@app.callback(Output('tmpTxt2', 'children'), [Input('treeFig', 'hoverData')])
+def treatHoverData2(hoverData):
+	return json.dumps(hoverData, indent=2)
+# End TMP
 
 app.run_server(debug=True)
 

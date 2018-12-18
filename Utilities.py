@@ -14,7 +14,8 @@ class Parameters:
 			if any(isinstance(val, tp) for tp in [str, int, bool, float, tuple, range]):
 				kt.append((name, None, val))
 			elif isinstance(val, Parameterizable):
-				kt.append((name, type(val).__name__, val.params.GetKeyTuple()))
+				#kt.append((name, type(val).__name__, val.params.GetKeyTuple()))
+				kt.append((name, type(val).__name__, val.GetParamKeyTuple()))
 			else:
 				raise NotImplementedError()
 				

@@ -13,60 +13,13 @@ import numpy as np
 #TMP
 import json
 
+from TreeUtilities import *
 #external_stylesheets = [
 #    "https://unpkg.com/tachyons@4.10.0/css/tachyons.min.css"]
 
 #app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
 app = dash.Dash(__name__)
-
-leafWidth = 1
-labelXpos = 0.07
-
-class NodePlot:
-	def __init__(self, node, parent = None):
-		self.node = node
-		self.parent = parent
-		if parent is None:
-			self.time = 0
-		else:
-			self.time = parent.time + node.edge.length
-
-		self.children = [NodePlot(c, self) for c in node.child_node_iter()]
-
-		if self.node.is_leaf():
-			self.width = leafWidth
-		else:
-			self.width = sum(c.width for c in self.children)
-		self.xpos = 0
-		self.left = 0
-		self.brLeft = 0
-		self.brRight = 0
-	
-	def computePos(self, left = 0):
-		self.left = left
-		if len(self.children) > 0:
-			for c in self.children:
-				c.computePos(left)
-				left += c.width
-			self.brLeft = self.children[0].xpos
-			self.brRight = self.children[-1].xpos
-			self.xpos = sum(c.xpos for c in self.children) / len(self.children)
-		else:
-			self.xpos = self.left + self.width / 2
-
-	def plot(self, ax, clade):
-		if len(self.children) > 0:
-			#ax.plot([self.time, self.time], [self.brLeft, self.brRight], 'b')
-			ax.plot([self.children[0].time, self.time, self.time, self.children[1].time], [self.children[0].xpos, self.brLeft, self.brRight, self.children[1].xpos], 'b', label='test')
-		else:
-			ax.plot(self.time, self.xpos, 'ro')
-		ax.plot(self.time, self.xpos, 'ro' if self.node != clade else 'go', label='omg')
-		if hasattr(self.node, 'traitVal'):
-			ax.text(self.time, self.xpos, str(self.node.traitVal))
-		for c in self.children:
-			ax.plot([self.time, c.time], [c.xpos, c.xpos], 'b')
-			c.plot(ax, clade)
 
 
 class TreePlotter(Parameterizable, Usable, DashInterfacable):
@@ -96,11 +49,7 @@ class TreePlotter(Parameterizable, Usable, DashInterfacable):
 		self.allNodes = list(self.t.preorder_node_iter())#internal_nodes(exclude_seed_node = False)
 
 		fig, ax = plt.subplots()
-		tp = NodePlot(self.t.seed_node)
-		tp.computePos()
-		tp.plot(ax, None)
-		fig.legend()
-
+		PlotTree(self.t, ax)
 		self.pltFig = tls.mpl_to_plotly(fig)
 
 		if hasattr(self.treeGenerator, 'birth_rf'):

@@ -24,6 +24,41 @@ class ResultAnalyzer(Parameterizable):
 import dendropy
 import plotly.graph_objs as go
 import dash_core_components as dcc
+from TreeUtilities import *
+
+class TreeVisualizer(ResultAnalyzer, DashInterfacable):
+	def __init__(self):
+		ResultAnalyzer.__init__(self)
+		DashInterfacable.__init__(self)
+	
+	def GetDefaultParams(self):
+		return ParametersDescr({
+			'treeId' : (1, int),
+		})
+
+	def Analyze(self, results):
+		self.addResultsToSelf(results)
+		return Results()
+
+	def _getInnerLayout(self):
+		fig = self.getTreeGraphCallback()(self.treeId)
+		return dcc.Graph(
+			style={'width':'100%'},
+			id=self._getElemId('innerLayout', 'treeGraph'), 
+			figure=fig)
+
+	def getTreeGraphCallback(self):
+		def PlotTree(treeId):
+			if hasattr(self, 'trees') and treeId < len(self.trees):
+				return PlotTreeInNewFig(self.trees[treeId])
+			else:
+				return {}
+		return PlotTree
+
+	def _buildInnerLayoutSignals(self, app):
+		app.callback(
+			Output(self._getElemId('innerLayout', 'treeGraph'), 'figure'), 
+			[Input(self._getElemId('params', 'treeId'), 'value')])(self.getTreeGraphCallback())
 
 class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 	def __init__(self):

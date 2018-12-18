@@ -194,9 +194,9 @@ class DashInterfacable(Interfacable):
 			anyChangeInputs.append(Input(obj._uselessDivIds['anyParamChange'], 'children'))
 
 		# Bind signals to detect any change in parameters or subparameters
-		app.callback(Output(self._uselessDivIds['anyParamChange'], 'children'), anyChangeInputs)(lambda *x:'')
-		for key, callBack in anyChangeCallBacks.items():
-			app.callback(Output(key[0], key[1]), anyChangeInputs)(self._generateAnyChangeCallback(callBack))
+		#app.callback(Output(self._uselessDivIds['anyParamChange'], 'children'), anyChangeInputs)(lambda *x:'')
+		#for key, callBack in anyChangeCallBacks.items():
+		#	app.callback(Output(key[0], key[1]), anyChangeInputs)(self._generateAnyChangeCallback(callBack))
 
 		# Build inner layout signals
 		self._buildInnerLayoutSignals(app)
@@ -325,7 +325,7 @@ class DashLayout(ABC):
 
 # Horizontal layout
 class DashHorizontalLayout(DashLayout):
-	def __init__(self, widthFunc = lambda ind, tot:int(100/tot)):
+	def __init__(self, widthFunc = lambda ind, tot:int(100/(tot+0.001))):
 		self.widthFunc = widthFunc
 
 	def GetLayout(self, elems, style={}):

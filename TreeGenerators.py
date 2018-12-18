@@ -50,10 +50,13 @@ class NonNeutralTreeGenerator(TreeGenerator):
 		tree = dendropy.Tree(taxon_namespace=taxon_namespace)
 		tree.is_rooted = True
 		tree.seed_node.edge.length = 0.0
-		extant_tips = set([tree.seed_node])
+		extant_tips = [tree.seed_node]
 		extinct_tips = set()
 		
 		total_time = 0
+
+		# Init Birth rates in edge
+		tree.seed_node.edge.birthRates = [(0, self.birth_rf.getRate(tree.seed_node, 0, total_time=0))]
 
 		while len(extant_tips) < num_extant_tips:
 			localTime = 0
@@ -61,11 +64,23 @@ class NonNeutralTreeGenerator(TreeGenerator):
 			eventProb = 0
 			# Determine the time of the next event
 			while noEvent:
-				minNextChange = min(self.birth_rf.getNextChange(n, n.edge.length + localTime, total_time=total_time+localTime) for n in extant_tips)
-				eventProb = sum(self.birth_rf.getRate(n, n.edge.length + localTime, total_time=total_time+localTime) for n in extant_tips)
+				allNextChange = [self.birth_rf.getNextChange(n, n.edge.length + localTime, total_time=total_time+localTime) for n in extant_tips]
+				sortedNextChange = sorted(enumerate(allNextChange), key=lambda x:x[1])
+				IndNC, minNextChange = sortedNextChange[0]
+				#IndNC, minNextChange = min(enumerate(allNextChange), key=lambda x:x[1])
+
+				allProbs = [self.birth_rf.getRate(n, n.edge.length + localTime, total_time=total_time+localTime) for n in extant_tips]
+				eventProb = sum(allProbs)
+
 				waiting_time = random.expovariate(eventProb)
 				localTime += min(waiting_time, minNextChange + epsilon)
 				noEvent = waiting_time > minNextChange
+				# Build rate variations in edges
+				if noEvent:
+					for n in [extant_tips[nc[0]] for nc in sortedNextChange if nc[1] <= minNextChange + epsilon]:
+						#n = extant_tips[IndNC]
+						n.edge.birthRates.append((total_time + localTime, self.birth_rf.getRate(n, n.edge.length+localTime, total_time=total_time+localTime)))
+					
 
 			# add waiting time to nodes
 			for nd in extant_tips:
@@ -73,6 +88,7 @@ class NonNeutralTreeGenerator(TreeGenerator):
 					nd.edge.length += localTime
 				except TypeError:
 					nd.edge.length = localTime
+					
 			total_time += localTime
 
 			# Determine in which branch will the event happen
@@ -86,13 +102,15 @@ class NonNeutralTreeGenerator(TreeGenerator):
 			c2 = nd.new_child()
 			c1.edge.length = 0
 			c2.edge.length = 0
-			extant_tips.add(c1)
-			extant_tips.add(c2)
+			c1.edge.birthRates = [(total_time, self.birth_rf.getRate(c1, 0, total_time=total_time))]
+			c2.edge.birthRates = [(total_time, self.birth_rf.getRate(c2, 0, total_time=total_time))]
+			extant_tips.append(c1)
+			extant_tips.append(c2)
 
 		# Get last nodes generated (a cherry with branch lenghts = 0) and replace a cherry by one single node
-		lastleaf=[n for n in tree.leaf_nodes() if n.edge_length == 0][0]
-		parent=lastleaf.parent_node
-		parent.remove_child(lastleaf, suppress_unifurcations=True)
+		#lastleaf=[n for n in tree.leaf_nodes() if n.edge_length == 0][0]
+		#parent=lastleaf.parent_node
+		#parent.remove_child(lastleaf, suppress_unifurcations=True)
 		return tree
 
 ##################

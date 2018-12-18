@@ -14,7 +14,6 @@ class Parameters:
 			if any(isinstance(val, tp) for tp in [str, int, bool, float, tuple, range]):
 				kt.append((name, None, val))
 			elif isinstance(val, Parameterizable):
-				#kt.append((name, type(val).__name__, val.params.GetKeyTuple()))
 				kt.append((name, type(val).__name__, val.GetParamKeyTuple()))
 			else:
 				raise NotImplementedError()
@@ -63,6 +62,14 @@ class Parameterizable(ABC):
 	def GetDefaultParams(self):
 		return ParametersDescr()
 
+# Utility class for Usable
+class ClickableData:
+	def __init__(self, func, ot, on, of):
+		self.func = func
+		self.outputType = ot
+		self.outputName = on
+		self.outputField = of
+
 # Usable abstract base class
 class Usable(ABC):
 	reg = {}
@@ -72,20 +79,22 @@ class Usable(ABC):
 		for className, funcs in Usable.reg.items():
 			if className in [cls.__name__ for cls in self.__class__.mro()]:
 				ret += funcs
-		return {f.__name__:f for f in ret}
+		return {f.func.__name__:f for f in ret}
 
-	def Clickable(f):
-		if f.__code__.co_argcount > 1:
-			raise SyntaxWarning('Clickable methods should not take any parameters besides self.')
-		scn = f.__qualname__.split('.')
-		if len(scn) == 1:
-			raise SyntaxWarning('Clickable should only decorate methods of subclasses of "Usable".')
-		className = scn[-2]
-		if className in Usable.reg:
-			Usable.reg[className].append(f)
-		else:
-			Usable.reg[className] = [f]
-		return f
+	def Clickable(outType = None, outName = None, outField = None):
+		def InternalClickable(f):
+			if f.__code__.co_argcount > 1:
+				raise SyntaxWarning('Clickable methods should not take any parameters besides self.')
+			scn = f.__qualname__.split('.')
+			if len(scn) == 1:
+				raise SyntaxWarning('Clickable should only decorate methods of subclasses of "Usable".')
+			className = scn[-2]
+			if className in Usable.reg:
+				Usable.reg[className].append(ClickableData(f, outType, outName, outField))
+			else:
+				Usable.reg[className] = [ClickableData(f, outType, outName, outField)]
+			return f
+		return InternalClickable
 
 # Wraps results from a simulation
 class Results(object):

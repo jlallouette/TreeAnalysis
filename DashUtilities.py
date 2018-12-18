@@ -51,11 +51,11 @@ class DashFieldData:
 		self.subKey = subKey
 
 class DashUseData:
-	def __init__(self, elemId, fieldName, obj, func):
+	def __init__(self, elemId, fieldName, obj, clickData):
 		self.id = elemId
 		self.fieldName = fieldName
 		self.obj = obj
-		self.func = func
+		self.clickData = clickData
 
 class DashDropDownData:
 	def __init__(self, elemId, fieldName, obj, attrName, ddDivId, allSavkKeys):
@@ -148,9 +148,14 @@ class DashInterfacable(Interfacable):
 		def CallMethods(*values):
 			for v, ufd in zip(values, self._useData):
 				if v is not None and v > 0:
-					ufd.func(ufd.obj)
+					ufd.clickData.func(ufd.obj)
 			fullLayout = self.GetLayout()# TODO Options ?
 			return fullLayout.children
+		return CallMethods
+
+	def _generateTargetedUseCallback(self, ud):
+		def CallMethods(value):
+			return ud.clickData.func(ud.obj)
 		return CallMethods
 
 	def _generateDropDownCallback(self, obj):
@@ -183,9 +188,15 @@ class DashInterfacable(Interfacable):
 				app.callback(Output(outId, 'style'), [Input(ddd.id, ddd.fieldName)], [State(outId, 'style')])(self._generateDropDownCallback(obj))
 				anyChangeInputs.append(Input(outId, 'style'))
 
-		# Then handle action signals
-		allInputs = [Input(ud.id, ud.fieldName) for ud in self._useData]
+		# Then handle default action signals
+		allInputs = [Input(ud.id, ud.fieldName) for ud in self._useData if ud.clickData.outputName is None]
 		app.callback(Output(self._fullDivId, 'children'), allInputs)(self._generateUseCallback())
+
+		# Then handle targeted action signals
+		for ud in self._useData:
+			if ud.clickData.outputName is not None:
+				ot, on, of = ud.clickData.outputType, ud.clickData.outputName, ud.clickData.outputField
+				app.callback(Output(self._getElemId(ot, on), of), [Input(ud.id, ud.fieldName)])(self._generateTargetedUseCallback(ud))
 
 		# Then treat signals of parameters sublayouts
 		for name, obj in self.subAuthValsObj.items():
@@ -194,9 +205,9 @@ class DashInterfacable(Interfacable):
 			anyChangeInputs.append(Input(obj._uselessDivIds['anyParamChange'], 'children'))
 
 		# Bind signals to detect any change in parameters or subparameters
-		#app.callback(Output(self._uselessDivIds['anyParamChange'], 'children'), anyChangeInputs)(lambda *x:'')
-		#for key, callBack in anyChangeCallBacks.items():
-		#	app.callback(Output(key[0], key[1]), anyChangeInputs)(self._generateAnyChangeCallback(callBack))
+		app.callback(Output(self._uselessDivIds['anyParamChange'], 'children'), anyChangeInputs)(self._generateAnyChangeCallback(lambda *x:''))
+		for key, callBack in anyChangeCallBacks.items():
+			app.callback(Output(key[0], key[1]), anyChangeInputs)(self._generateAnyChangeCallback(callBack))
 
 		# Build inner layout signals
 		self._buildInnerLayoutSignals(app)
@@ -282,11 +293,11 @@ class DashInterfacable(Interfacable):
 		# Then display self uses
 		if not hideUsage and isinstance(self, Usable):
 			allUses = self.GetUsableMethods()
-			for name, func in allUses.items():
+			for name, clickData in allUses.items():
 				elemId = self._getElemId('uses', name)
 				uses.append(html.Button(name, id=elemId))
 				if self._fillFieldData:
-					self._useData.append(DashUseData(elemId, 'n_clicks', self, func))
+					self._useData.append(DashUseData(elemId, 'n_clicks', self, clickData))
 
 		# Then display inner layout if it exists
 		innerElem = html.Div(self._getInnerLayout(), id=self._getElemId('special', 'innerLayout'))

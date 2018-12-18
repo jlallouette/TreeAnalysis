@@ -67,7 +67,6 @@ class NonNeutralTreeGenerator(TreeGenerator):
 				allNextChange = [self.birth_rf.getNextChange(n, n.edge.length + localTime, total_time=total_time+localTime) for n in extant_tips]
 				sortedNextChange = sorted(enumerate(allNextChange), key=lambda x:x[1])
 				IndNC, minNextChange = sortedNextChange[0]
-				#IndNC, minNextChange = min(enumerate(allNextChange), key=lambda x:x[1])
 
 				allProbs = [self.birth_rf.getRate(n, n.edge.length + localTime, total_time=total_time+localTime) for n in extant_tips]
 				eventProb = sum(allProbs)
@@ -78,7 +77,6 @@ class NonNeutralTreeGenerator(TreeGenerator):
 				# Build rate variations in edges
 				if noEvent:
 					for n in [extant_tips[nc[0]] for nc in sortedNextChange if nc[1] <= minNextChange + epsilon]:
-						#n = extant_tips[IndNC]
 						n.edge.birthRates.append((total_time + localTime, self.birth_rf.getRate(n, n.edge.length+localTime, total_time=total_time+localTime)))
 					
 

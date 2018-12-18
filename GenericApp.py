@@ -15,7 +15,7 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 		return ParametersDescr({
 		})
 
-	@Usable.Clickable
+	@Usable.Clickable('special', 'innerLayout', 'children')
 	def Analyze(self):
 		res = Results()
 		for sim in self.simulations:
@@ -25,6 +25,8 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 
 		for analyzer in self.analyzers:
 			res += analyzer.Analyze(res)
+
+		return self._getInnerLayout()
 	
 	def _getInnerLayout(self):
 		simElems = [sim.GetLayout() for sim in self.simulations if isinstance(sim, DashInterfacable)]

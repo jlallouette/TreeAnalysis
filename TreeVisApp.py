@@ -43,7 +43,7 @@ class TreePlotter(Parameterizable, Usable, DashInterfacable):
 			'autoUpdate': (False, bool)
 		})
 
-	@Usable.Clickable
+	@Usable.Clickable()
 	def Plot(self):
 		self.t = self.treeGenerator.generate(self.tree_size)
 		self.allNodes = list(self.t.preorder_node_iter())#internal_nodes(exclude_seed_node = False)

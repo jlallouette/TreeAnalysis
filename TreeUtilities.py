@@ -1,12 +1,13 @@
 import math
-# TODO TMP
-import random
 
 import plotly.graph_objs as go
 
 leafWidth = 1
-#birthRateColorScale = [[0, 'rgb(0, 0, 0)'],[1, 'rgb(255, 0, 0)']]
-birthRateColorScale = [[0, 'rgb(0, 0, 255)'],[0.5, 'rgb(127, 127, 127)'],[1, 'rgb(255, 0, 0)']]
+#birthRateColorScale = [[0, 'rgb(0, 0, 255)'],[0.5, 'rgb(127, 127, 127)'],[1, 'rgb(255, 0, 0)']]
+birthRateColorScale = [[0, 'rgb(0,0,131)'], [0.125, 'rgb(0,60,170)'],
+	[0.375, 'rgb(5,255,255)'], [0.625, 'rgb(255,255,0)'],
+	[0.875, 'rgb(250,0,0)'], [1, 'rgb(128,0,0)']
+]
 
 class NodePlotter:
 	def __init__(self, node, EdgePlotCls, parent = None):
@@ -77,20 +78,15 @@ class NodePlotter:
 		nodes = dict(type='scatter',
 			x=self.GetAllAttr('time'),
 			y=self.GetAllAttr('xpos'),
-			#colorscale = 'Viridis',#,
-			#autocolorscale = False,
 			mode='markers',
-			#marker=dict(color=self.GetAllAttr('color'), size=5),
 			marker=dict(color=[0 for v in self.GetAllAttr('time')], size=5, 
 						colorscale=birthRateColorScale,showscale=True, cauto=False, 
 						cmin=self.minRate, cmax=self.maxRate if self.maxRate > self.minRate else 1,
 						colorbar = dict(title = 'Birth rate', titleside = 'top')),
-			#text='',#text,  # TODO vignet information of each node
 			text=['node {}'.format(i) for i,n in enumerate(self.GetAllNodes())],
 			hoverinfo='',
 			name='allNodes'
 		)
-		#nodes = go.Scatter(x=self.GetAllAttr('time'),y=self.GetAllAttr('xpos'),mode='markers',marker=dict(color=[random.random() for v in self.GetAllAttr('time')], size=5))
 		allSplits = []
 		for n in self.GetAllNodes():
 			allSplits.append(dict(x0=n.time, x1=n.time, y0=n.brLeft, y1=n.brRight, type='line', layer='below', line=dict(color=self.GetSplitColor(),width=self.splitWidth)))

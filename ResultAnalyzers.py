@@ -132,16 +132,23 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 			self.selectedTree = source.treeId
 
 	def _getInnerLayout(self):
-		sci = []
+		sciShapes = []
+		sciHist = []
 		if hasattr(self, 'colless_tree_imba'):
-			sciHist = go.Histogram(x=self.colless_tree_imba)
-			sci.append(sciHist)
+			sciHist = [go.Histogram(x=self.colless_tree_imba)]
 			if hasattr(self, 'selectedTree'):
-				sciSelect = go.Scatter(x=[self.colless_tree_imba[self.selectedTree]]*2, y=[0, 10], mode='lines', line=dict(color='red'), name='Selected tree')
-				sci.append(sciSelect)
+				xVal = self.colless_tree_imba[self.selectedTree]
+				sciShapes = [dict(x0=xVal, x1=xVal, y0=0, y1=1, yref='paper', type='line', line=dict(color='red',width=2))]
+		siShapes = []
+		siHist = []
+		if hasattr(self, 'sackin_index'):
+			siHist = [go.Histogram(x=self.sackin_index)]
+			if hasattr(self, 'selectedTree'):
+				xVal = self.sackin_index[self.selectedTree]
+				siShapes = [dict(x0=xVal, x1=xVal, y0=0, y1=1, yref='paper', type='line', line=dict(color='red',width=2))]
 		allHists = [
 			dcc.Graph(figure={
-				'data':sci,
+				'data':sciHist,
 				'layout': go.Layout(
 					xaxis={
 						'title': 'Colless Tree Imbalance',
@@ -153,11 +160,12 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 					},
 					margin={'l': 40, 'b': 30, 't': 10, 'r': 0},
 					height=450,
-					hovermode='closest'
+					hovermode='closest',
+					shapes=sciShapes
 				)
 			}),
 			dcc.Graph(figure={
-				'data':[go.Histogram(x=self.sackin_index)],
+				'data':siHist,
 				'layout': go.Layout(
 					xaxis={
 						'title': 'Sackin Index',
@@ -169,7 +177,8 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 					},
 					margin={'l': 40, 'b': 30, 't': 10, 'r': 0},
 					height=450,
-					hovermode='closest'
+					hovermode='closest',
+					shapes=siShapes
 				)
 			})
 		]

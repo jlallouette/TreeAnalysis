@@ -352,6 +352,7 @@ class DashHorizontalLayout(DashLayout):
 				e.style = {}
 			if 'display' not in e.style or e.style['display'] != 'none':
 				e.style['display'] = 'inline-block'
+				e.style['vertical-align'] = 'top'
 				e.style['width'] = '{}%'.format(self.widthFunc(visInd, nbVisElems))
 				visInd += 1
 		return html.Div(elems, style=style) if len(style) > 0 else html.Div(elems)

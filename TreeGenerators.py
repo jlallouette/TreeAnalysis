@@ -82,7 +82,7 @@ class NonNeutralTreeGenerator(TreeGenerator):
 				noEvent = waiting_time > minNextChange
 				# Build rate variations in edges
 				if noEvent:
-					for n, changeIsBirth in [(extant_tips[nc[0]], nc[1][1]) for nc in sortedNextChange if nc[1][0] <= minNextChange + epsilon]:
+					for n, changeIsBirth in [(extant_tips[nc[0] - (len(extant_tips) if not nc[1][1] else 0)], nc[1][1]) for nc in sortedNextChange if nc[1][0] <= minNextChange + epsilon]:
 						if changeIsBirth:
 							n.edge.birthRates.append((total_time + localTime, self.birth_rf.getRate(n, n.edge.length+localTime, total_time=total_time+localTime)))
 						else:
@@ -113,6 +113,8 @@ class NonNeutralTreeGenerator(TreeGenerator):
 				c2.edge.length = 0
 				c1.edge.birthRates = [(total_time, self.birth_rf.getRate(c1, 0, total_time=total_time))]
 				c2.edge.birthRates = [(total_time, self.birth_rf.getRate(c2, 0, total_time=total_time))]
+				c1.edge.deathRates = [(total_time, self.death_rf.getRate(c1, 0, total_time=total_time))]
+				c2.edge.deathRates = [(total_time, self.death_rf.getRate(c2, 0, total_time=total_time))]
 				extant_tips.append(c1)
 				extant_tips.append(c2)
 			else:
@@ -244,10 +246,10 @@ class PhaseBirthRateFunc(NonNeutralRateFunction):
 	
 	def GetDefaultParams(self):
 		return ParametersDescr({
-			'period' : (10,),
+			'period' : (10.0,float),
 			'nbSteps' : (10, int),
-			'maxRate' : (1.0,),
-			'minRate' : (0.01,),
+			'maxRate' : (1.0,float),
+			'minRate' : (0.01,float),
 			'periodFunc' : ('lambda t:(1+math.sin(t*2*math.pi))/2',)
 		})
 

@@ -10,7 +10,7 @@ birthRateColorScale = [[0, 'rgb(0,0,131)'], [0.125, 'rgb(0,60,170)'],
 ]
 
 class NodePlotter:
-	def __init__(self, node, EdgePlotCls, parent = None):
+	def __init__(self, node, EdgePlotCls, parent = None, rateToDisplay = 'birth'):
 		self.node = node
 		self.parent = parent
 		if self.parent is None:
@@ -18,7 +18,7 @@ class NodePlotter:
 		else:
 			self.time = parent.time + self.node.edge.length
 
-		self.children = [NodePlotter(c, EdgePlotCls, self) for c in node.child_node_iter()]
+		self.children = [NodePlotter(c, EdgePlotCls, self, rateToDisplay=rateToDisplay) for c in node.child_node_iter()]
 
 		if self.node.is_leaf():
 			self.width = leafWidth
@@ -30,7 +30,8 @@ class NodePlotter:
 		self.brRight = 0
 		self.splitWidth = 2
 
-		self.edge = EdgePlotCls(self.node.edge, self, self.parent)
+		self.edge = EdgePlotCls(self.node.edge, self, self.parent, rateToDisplay = rateToDisplay)
+		self.rateToDisplay = rateToDisplay
 
 	def ComputeAll(self):
 		# Positions
@@ -82,7 +83,7 @@ class NodePlotter:
 			marker=dict(color=[0 for v in self.GetAllAttr('time')], size=5, 
 						colorscale=birthRateColorScale,showscale=True, cauto=False, 
 						cmin=self.minRate, cmax=self.maxRate if self.maxRate > self.minRate else 1,
-						colorbar = dict(title = 'Birth rate', titleside = 'top')),
+						colorbar = dict(title = self.rateToDisplay + ' rate', titleside = 'top')),
 			text=['node {}'.format(i) for i,n in enumerate(self.GetAllNodes())],
 			hoverinfo='',
 			name='allNodes'
@@ -99,7 +100,7 @@ class NodePlotter:
 		return [nodes], layout
 
 class EdgePlotter:
-	def __init__(self, edge, child, parent):
+	def __init__(self, edge, child, parent, rateToDisplay):
 		self.edge = edge
 		self.child = child
 		self.parent = parent
@@ -110,13 +111,14 @@ class EdgePlotter:
 			self.startTime = 0
 		self.endTime = self.child.time
 		self.edgeWidth = 2
+		self.rateToDisplay = rateToDisplay
 
 	def ComputeAll(self):
 		self.x = self.child.xpos
 		self.allTimes = []
 		self.allRates = []
-		if hasattr(self.edge, 'birthRates'):
-			for t, rate in self.edge.birthRates:
+		if hasattr(self.edge, self.rateToDisplay + 'Rates'):
+			for t, rate in eval('self.edge.' + self.rateToDisplay + 'Rates'):
 				self.allTimes.append(t)
 				self.allRates.append(rate)
 		if len(self.allTimes) == 0:
@@ -149,8 +151,8 @@ class EdgePlotter:
 				allSegments.append(dict(x0=self.allTimes[i], x1=self.allTimes[i+1], y0=self.x, y1=self.x, type='line', layer='below', line=dict(color=self.GetColor(rate, minRate, maxRate),width=self.edgeWidth)))
 		return allSegments
 
-def PlotTreeInNewFig(tree):
-	tp = NodePlotter(tree.seed_node, EdgePlotter)
+def PlotTreeInNewFig(tree, rateToDisplay = 'birth'):
+	tp = NodePlotter(tree.seed_node, EdgePlotter, rateToDisplay=rateToDisplay)
 	tp.ComputeAll()
 	nodes, layout = tp.GetPlotElem()
 	return dict(data=nodes, layout=layout)

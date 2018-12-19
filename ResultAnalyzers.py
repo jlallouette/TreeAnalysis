@@ -58,9 +58,12 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 		ResultAnalyzer.__init__(self)
 		DashInterfacable.__init__(self)
 
+		self._setCustomLayout('params', DashHorizontalLayout())
+
 	def GetDefaultParams(self):
 		return ParametersDescr({
 			'treeId' : (1, int),
+			'rateToDisplay': ('birth', str, ['birth', 'death'])
 		})
 
 	def Analyze(self, results):
@@ -73,7 +76,7 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 
 	def _getInnerLayout(self):
 		if hasattr(self, 'trees') and self.treeId < len(self.trees):
-			fig = PlotTreeInNewFig(self.trees[self.treeId])
+			fig = PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay)
 		else:
 			fig = {}
 		graph = dcc.Graph(
@@ -85,8 +88,8 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 
 	def getTreeGraphCallback(self):
 		def PlotTree(treeId):
-			if hasattr(self, 'trees') and treeId < len(self.trees):
-				return PlotTreeInNewFig(self.trees[treeId])
+			if hasattr(self, 'trees') and self.treeId < len(self.trees):
+				return PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay)
 			else:
 				return {}
 		return PlotTree
@@ -94,7 +97,8 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 	def _buildInnerLayoutSignals(self, app):
 		app.callback(
 			Output(self._getElemId('innerLayout', 'treeGraph'), 'figure'), 
-			[Input(self._getElemId('params', 'treeId'), 'value')])(self.getTreeGraphCallback())
+			[Input(self._uselessDivIds['anyParamChange'], 'children')])(self.getTreeGraphCallback())
+			#[Input(self._getElemId('params', 'treeId'), 'value')])(self.getTreeGraphCallback())
 		#TODO TMP
 		app.callback(
 			Output('testTmp3', 'children'),

@@ -19,7 +19,11 @@ class TreeStatSimulation(SimulationRunner, DashInterfacable):
 		res = Results()
 		res.trees = []
 		for i in range(self.nb_tree):
-			t = self.treeGenerator.generate(self.tree_size)
+			t = None
+			while t is None or len(t.leaf_nodes()) < self.tree_size:
+				if t is not None:
+					print('Rejected tree with {} leaves (need {}).'.format(len(t.leaf_nodes()), self.tree_size))
+				t = self.treeGenerator.generate(self.tree_size)
 			res.trees.append(t)
 		return res
 

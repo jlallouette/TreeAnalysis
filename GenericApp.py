@@ -31,9 +31,9 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 	def _getInnerLayout(self):
 		simElems = [sim.GetLayout() for sim in self.simulations if isinstance(sim, DashInterfacable)]
 		raElems = [ra.GetLayout() for ra in self.analyzers if isinstance(ra, DashInterfacable)]
-		simLo = DashHorizontalLayout().GetLayout(simElems)
-		raLo = DashHorizontalLayout().GetLayout(raElems)
-		return DashVerticalLayout().GetLayout([simLo, raLo])
+		simLo = DashVerticalLayout().GetLayout(simElems, style={'vertical-align' :'top'})
+		raLo = DashVerticalLayout().GetLayout(raElems)
+		return DashHorizontalLayout(lambda ind, tot:25 if ind==0 else 75).GetLayout([simLo, raLo])
 
 	def _buildInnerLayoutSignals(self, app):
 		for sim in self.simulations:
@@ -42,6 +42,21 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 		for ra in self.analyzers:
 			if isinstance(ra, DashInterfacable):
 				ra.BuildAllSignals(app)
+			# First try to add automatic updates
+			for raCls in ra.DefaultUpdateOnModif():
+				for src in self.analyzers:
+					if isinstance(src, raCls):
+						src.AddToUpdateOnModif(ra)
+
+		# Build Result analyzers update signals
+		for ra in self.analyzers:
+			if isinstance(ra, DashInterfacable):
+				for toUpdt in ra._toUpdateOnModif:
+					if isinstance(toUpdt, DashInterfacable):
+						print('BUILDING UPDATE SIGNAL', toUpdt._getElemId('special', 'innerLayout'), ra._uselessDivIds['anyParamChange'])
+						app.callback(Output(toUpdt._getElemId('special', 'innerLayout'), 'children'), 
+							[Input(ra._uselessDivIds['anyParamChange'], 'children')])(toUpdt._getUpdateOnModifCallback(ra))
+
 
 	def AddAnalyzer(self, analyzer):
 		deps = analyzer.DependsOn()

@@ -1,8 +1,12 @@
 import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output, State
+import dash
 
 from Utilities import *
+
+# TODO TMP
+import random
 
 # Interfacable abstract base class
 class Interfacable(ABC):
@@ -139,9 +143,7 @@ class DashInterfacable(Interfacable):
 						except:
 							raise ValueError('Attribute {} of object {} cannot be updated with subkey {}.'.format(dfd.attrName, dfd.obj, dfd.subKey))
 					setattr(dfd.obj, dfd.attrName, oldVal)
-			# Then re-generate the layout
-			#fullLayout = self.GetLayout()# TODO Options ?
-			return ''
+			return random.random()
 		return UpdateValues
 
 	def _generateUseCallback(self):
@@ -149,7 +151,7 @@ class DashInterfacable(Interfacable):
 			for v, ufd in zip(values, self._useData):
 				if v is not None and v > 0:
 					ufd.clickData.func(ufd.obj)
-			fullLayout = self.GetLayout()# TODO Options ?
+			fullLayout = self.GetLayout()
 			return fullLayout.children
 		return CallMethods
 
@@ -164,9 +166,14 @@ class DashInterfacable(Interfacable):
 			return style
 		return UpdateDropDown
 
-	def _generateAnyChangeCallback(self, acc):
+	def _generateAnyChangeCallback(self, acc = lambda *v:random.random()):
 		def AnyChangeCB(*values):
-			return acc(values)
+			if any(val != '' for val in values):
+				print('Callback!')
+				return acc(values)
+			else:
+				raise dash.exceptions.PreventUpdate()
+				return ''
 		return AnyChangeCB
 
 	# Bind all signals
@@ -205,7 +212,7 @@ class DashInterfacable(Interfacable):
 			anyChangeInputs.append(Input(obj._uselessDivIds['anyParamChange'], 'children'))
 
 		# Bind signals to detect any change in parameters or subparameters
-		app.callback(Output(self._uselessDivIds['anyParamChange'], 'children'), anyChangeInputs)(self._generateAnyChangeCallback(lambda *x:''))
+		app.callback(Output(self._uselessDivIds['anyParamChange'], 'children'), anyChangeInputs)(self._generateAnyChangeCallback())
 		for key, callBack in anyChangeCallBacks.items():
 			app.callback(Output(key[0], key[1]), anyChangeInputs)(self._generateAnyChangeCallback(callBack))
 
@@ -286,7 +293,7 @@ class DashInterfacable(Interfacable):
 							subLayouts.append(self.subAuthValsObj[savk].GetLayout(hideFull = True))
 				if len(subLayouts) > 0:
 					ddDivId = self._getElemId('dropDownDiv', name)
-					params.append(html.Div(subLayouts, id=ddDivId, style={'border-style':'solid', 'border-width':'1px'}))
+					params.append(html.Div(subLayouts, id=ddDivId))#, style={'border-style':'solid', 'border-width':'1px'}))
 					if self._fillFieldData and len(subLayouts) > 1:
 						self._dropDownData.append(DashDropDownData(elemId, 'value', self, name, ddDivId, allSavkKeys))
 
@@ -306,10 +313,10 @@ class DashInterfacable(Interfacable):
 		# TODO Write different layout arrangements
 		paramStyle = {'display': 'none' if hideParams else 'inline-block'}
 		useStyle = {'display': 'none' if hideUsage else 'inline-block'}
-		fullStyle = {'display':'none' if hideFull else 'inline-block', 'width':'100%'}
+		fullStyle = {'display':'none' if hideFull else 'inline-block'}
 		uselessStyle = {'display':'none'}
 
-		uselessDivs = [html.Div(id=idv, style=uselessStyle) for nm, idv in self._uselessDivIds.items()]
+		uselessDivs = [html.Div(id=idv, style=uselessStyle, children='') for nm, idv in self._uselessDivIds.items()]
 
 		controlDivs = [self._getCustomLayout('params').GetLayout(params, style = paramStyle)]
 		if len(uses) > 0:
@@ -322,7 +329,7 @@ class DashInterfacable(Interfacable):
 
 		allDiv = self._getCustomLayout('all').GetLayout(allDivs)
 
-		finalElem = html.Div(id=self._fullDivId, children=allDiv, style=fullStyle)
+		finalElem = html.Div(id=self._fullDivId, children=allDiv, style=fullStyle, className='InterfaceBlock')
 
 		self._fillFieldData = False
 		return finalElem

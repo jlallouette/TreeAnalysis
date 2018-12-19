@@ -81,7 +81,8 @@ class NodePlotter:
 			y=self.GetAllAttr('xpos'),
 			mode='markers',
 			marker=dict(color=self.GetAllAttr('color'), size=5),
-			text='',#text,  # TODO vignet information of each node
+			#text='',#text,  # TODO vignet information of each node
+			text=['node {}'.format(i) for i,n in enumerate(self.GetAllNodes())],
 			hoverinfo='',
 			name='allNodes'
 		)
@@ -93,7 +94,7 @@ class NodePlotter:
 		for edge in self.GetAllAttr('edge'):
 			allEdges += edge.GetPlotElem(self.minRate, self.maxRate)
 
-		layout = dict(title='Tree Plot', shapes = allSplits + allEdges, xaxis=dict(showgrid=False), yaxis=dict(showgrid=False))
+		layout = dict(title='Tree Plot', shapes = allSplits + allEdges, xaxis=dict(showgrid=False), yaxis=dict(showgrid=False), hovermode='closest')
 		return [nodes], layout
 
 class EdgePlotter:

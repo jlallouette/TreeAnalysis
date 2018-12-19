@@ -31,7 +31,6 @@ class ResultAnalyzer(Parameterizable):
 
 	# Returns the update callback, the returned callback can depend on which object was updated
 	def _getUpdateOnModifCallback(self, source):
-		print('Gettting callback function in {} from {}'.format(self, source))
 		def updateFunc(val):
 			self._update(source)
 			return self._getInnerLayout()
@@ -123,7 +122,6 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 			res.sackin_index.append(dendropy.calculate.treemeasure.sackin_index(t))
 
 		self.addResultsToSelf(res)
-		print(self.__dict__)
 		return res
 	
 	def DefaultUpdateOnModif(self):

@@ -19,7 +19,6 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 	def Analyze(self):
 		res = Results()
 		for sim in self.simulations:
-			print(self.simManager.GetKeyTuple(sim))
 			res += self.simManager.GetSimulationResult(sim)
 		self.simManager.SaveSimulations()
 
@@ -53,7 +52,6 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 			if isinstance(ra, DashInterfacable):
 				for toUpdt in ra._toUpdateOnModif:
 					if isinstance(toUpdt, DashInterfacable):
-						print('BUILDING UPDATE SIGNAL', toUpdt._getElemId('special', 'innerLayout'), ra._uselessDivIds['anyParamChange'])
 						app.callback(Output(toUpdt._getElemId('special', 'innerLayout'), 'children'), 
 							[Input(ra._uselessDivIds['anyParamChange'], 'children')])(toUpdt._getUpdateOnModifCallback(ra))
 
@@ -74,6 +72,5 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 			else:
 				raise ValueError('Dependencies can only be of classResultAnalyzer or SimulationRunner, received class {}'.format(dep.__name__))
 		self.analyzers.append(analyzer)
-		print(self.simulations, self.analyzers)
 
 	

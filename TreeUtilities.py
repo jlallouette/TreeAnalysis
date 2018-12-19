@@ -1,14 +1,12 @@
-# TMP  TODO Remove when no longer needed
-import matplotlib
-matplotlib.use('agg')
-import matplotlib.pyplot as plt
-import plotly.tools as tls
-# END TMP
 import math
+# TODO TMP
+import random
 
 import plotly.graph_objs as go
 
 leafWidth = 1
+#birthRateColorScale = [[0, 'rgb(0, 0, 0)'],[1, 'rgb(255, 0, 0)']]
+birthRateColorScale = [[0, 'rgb(0, 0, 255)'],[0.5, 'rgb(127, 127, 127)'],[1, 'rgb(255, 0, 0)']]
 
 class NodePlotter:
 	def __init__(self, node, EdgePlotCls, parent = None):
@@ -79,13 +77,20 @@ class NodePlotter:
 		nodes = dict(type='scatter',
 			x=self.GetAllAttr('time'),
 			y=self.GetAllAttr('xpos'),
+			#colorscale = 'Viridis',#,
+			#autocolorscale = False,
 			mode='markers',
-			marker=dict(color=self.GetAllAttr('color'), size=5),
+			#marker=dict(color=self.GetAllAttr('color'), size=5),
+			marker=dict(color=[0 for v in self.GetAllAttr('time')], size=5, 
+						colorscale=birthRateColorScale,showscale=True, cauto=False, 
+						cmin=self.minRate, cmax=self.maxRate if self.maxRate > self.minRate else 1,
+						colorbar = dict(title = 'Birth rate', titleside = 'top')),
 			#text='',#text,  # TODO vignet information of each node
 			text=['node {}'.format(i) for i,n in enumerate(self.GetAllNodes())],
 			hoverinfo='',
 			name='allNodes'
 		)
+		#nodes = go.Scatter(x=self.GetAllAttr('time'),y=self.GetAllAttr('xpos'),mode='markers',marker=dict(color=[random.random() for v in self.GetAllAttr('time')], size=5))
 		allSplits = []
 		for n in self.GetAllNodes():
 			allSplits.append(dict(x0=n.time, x1=n.time, y0=n.brLeft, y1=n.brRight, type='line', layer='below', line=dict(color=self.GetSplitColor(),width=self.splitWidth)))
@@ -129,17 +134,23 @@ class EdgePlotter:
 		if rate is None or maxRate - minRate == 0:
 			return 'rgb(0,0,0)'
 		else:
-			return 'rgb({},0,0)'.format(255*(rate-minRate)/(maxRate-minRate))
+			currVal = (rate-minRate)/(maxRate-minRate)
+			for v1, v2 in zip(birthRateColorScale, birthRateColorScale[1:]):
+				if v1[0] <= currVal <= v2[0]:
+					c1 = [float(v) for v in v1[1][4:-1].split(',')]
+					c2 = [float(v) for v in v2[1][4:-1].split(',')]
+					relVal = (currVal-v1[0])/(v2[0]-v1[0])
+					c3 = [int((v2-v1)*relVal+v1) for v1, v2 in zip(c1, c2)]
+					return 'rgb({},{},{})'.format(*c3)
+			return birthRateColorScale[-1][1]
 
 	def GetPlotElem(self, minRate, maxRate):
 		allSegments = []
 		if len(self.allRates) == 0:
 			allSegments.append(dict(x0=self.startTime, x1=self.endTime, y0=self.x, y1=self.x, type='line', layer='below', line=dict(color=self.GetColor(),width=self.edgeWidth)))
-			#return go.Scatter(x=self.allTimes, y = [self.x]*len(self.allTimes), color=self.GetColor(), mode = 'lines', name = 'lines')
 		else:
 			for i, rate in enumerate(self.allRates):
 				allSegments.append(dict(x0=self.allTimes[i], x1=self.allTimes[i+1], y0=self.x, y1=self.x, type='line', layer='below', line=dict(color=self.GetColor(rate, minRate, maxRate),width=self.edgeWidth)))
-			#return go.Scatter(x=self.allTimes, y = [self.x]*len(self.allTimes), color=self.allRates, mode = 'lines', name = 'lines')
 		return allSegments
 
 def PlotTreeInNewFig(tree):
@@ -149,74 +160,3 @@ def PlotTreeInNewFig(tree):
 	return dict(data=nodes, layout=layout)
 
 
-#		branch_line = dict(type='line', layer='below', line=dict(color=line_color, width=line_width)
-#			x0 = )
-#if orientation == 'horizontal':
-#branch_line.update(x0=x_start,
-#y0=y_curr,
-#x1=x_curr,
-#y1=y_curr)
-
-#leafWidth = 1
-#labelXpos = 0.07
-#
-#class NodePlot:
-#	def __init__(self, node, parent = None):
-#		self.node = node
-#		self.parent = parent
-#		if parent is None:
-#			self.time = 0
-#		else:
-#			self.time = parent.time + node.edge.length
-#
-#		self.children = [NodePlot(c, self) for c in node.child_node_iter()]
-#
-#		if self.node.is_leaf():
-#			self.width = leafWidth
-#		else:
-#			self.width = sum(c.width for c in self.children)
-#		self.xpos = 0
-#		self.left = 0
-#		self.brLeft = 0
-#		self.brRight = 0
-#	
-#	def computePos(self, left = 0):
-#		self.left = left
-#		if len(self.children) > 0:
-#			for c in self.children:
-#				c.computePos(left)
-#				left += c.width
-#			self.brLeft = self.children[0].xpos
-#			self.brRight = self.children[-1].xpos
-#			self.xpos = sum(c.xpos for c in self.children) / len(self.children)
-#		else:
-#			self.xpos = self.left + self.width / 2
-#
-#	def plot(self, ax, clade):
-#		if len(self.children) > 0:
-#			#ax.plot([self.time, self.time], [self.brLeft, self.brRight], 'b')
-#			ax.plot([self.children[0].time, self.time, self.time, self.children[1].time], [self.children[0].xpos, self.brLeft, self.brRight, self.children[1].xpos], 'b', label='test')
-#		else:
-#			ax.plot(self.time, self.xpos, 'ro')
-#		ax.plot(self.time, self.xpos, 'ro' if self.node != clade else 'go', label='omg')
-#		if hasattr(self.node, 'traitVal'):
-#			ax.text(self.time, self.xpos, str(self.node.traitVal))
-#		for c in self.children:
-#			ax.plot([self.time, c.time], [c.xpos, c.xpos], 'b')
-#			c.plot(ax, clade)
-#
-#class EdgePlot:
-#	
-#
-#def PlotTree(tree, ax):
-#	tp = NodePlot(tree.seed_node)
-#	tp.computePos()
-#	tp.plot(ax, None)
-#
-#def PlotTreeInNewFig(tree):
-#	fig, ax = plt.subplots()
-#	PlotTree(tree, ax)
-#	pltFig = tls.mpl_to_plotly(fig)
-#	return pltFig
-#
-#

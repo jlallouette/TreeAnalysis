@@ -2,11 +2,6 @@ import pickle
 import os
 from Utilities import *
 
-# TODO Remove?
-#def LoadSimulations(fname):
-#	with open(fname, 'rb') as f:
-#		return pickle.load(f)
-
 class SimulationManager:
 	def __init__(self, fname = 'Simulations.pkl'):
 		self.fname = fname

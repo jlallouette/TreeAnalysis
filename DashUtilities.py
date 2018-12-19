@@ -2,11 +2,9 @@ import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output, State
 import dash
+import random
 
 from Utilities import *
-
-# TODO TMP
-import random
 
 # Interfacable abstract base class
 class Interfacable(ABC):
@@ -169,7 +167,6 @@ class DashInterfacable(Interfacable):
 	def _generateAnyChangeCallback(self, acc = lambda *v:random.random()):
 		def AnyChangeCB(*values):
 			if any(val != '' for val in values):
-				print('Callback!')
 				return acc(values)
 			else:
 				raise dash.exceptions.PreventUpdate()

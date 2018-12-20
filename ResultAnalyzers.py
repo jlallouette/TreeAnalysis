@@ -50,8 +50,12 @@ import dendropy
 import plotly.graph_objs as go
 import dash_core_components as dcc
 from TreeUtilities import *
+import numpy as np
+import copy
 # TODO TMP
 import json
+
+RateNames = ['birth', 'death']
 
 class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 	def __init__(self):
@@ -59,46 +63,137 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 		DashInterfacable.__init__(self)
 
 		self._setCustomLayout('params', DashHorizontalLayout())
+		self.smoothedRate = {name:{} for name in RateNames}
 
 	def GetDefaultParams(self):
 		return ParametersDescr({
 			'treeId' : (1, int),
-			'rateToDisplay': ('birth', str, ['birth', 'death'])
+			'rateToDisplay': ('birth', str, ['birth', 'death']),
+			'filterWidth': (0.1,),
 		})
 
 	def Analyze(self, results):
 		self.addResultsToSelf(results)
 		res = Results()
 
-		res.selectedTree = self.treeId
+		if self.treeId < len(self.trees):
+			t = self.trees[self.treeId]
+			t.calc_node_root_distances()
+			t.calc_node_ages(set_node_age_fn = lambda n: t.seed_node.edge.length + n.root_distance)
+			self.selectedMaxTime = max(nd.age for nd in t)
+		else:
+			self.selectedMaxTime = 1
 
+		res.rawRate = {name:[] for name in RateNames}
+		# TODO Find some way to auto-compute epsilon
+		epsilon = 0.00001
+		for i, t in enumerate(self.trees):
+			t.calc_node_root_distances()
+			t.calc_node_ages(set_node_age_fn = lambda n: t.seed_node.edge.length + n.root_distance)
+			stTotTime = max(nd.age for nd in t)
+			sigs = Results()
+			sigs.time = []
+			sigs.rate = []
+			sigs.nbLin = []
+			res.rawRate['birth'].append(sigs)
+			res.rawRate['death'].append(copy.deepcopy(sigs))
+			tmpNbLin = 1
+			for n in t.ageorder_node_iter(include_leaves = True):
+				if stTotTime - n.age > epsilon:
+					if n.is_leaf():
+						res.rawRate['death'][-1].time.append(n.age)
+						res.rawRate['death'][-1].rate.append(1)
+						res.rawRate['death'][-1].nbLin.append(tmpNbLin)
+						tmpNbLin -= 1
+					else:
+						res.rawRate['birth'][-1].time.append(n.age)
+						res.rawRate['birth'][-1].rate.append(1)
+						res.rawRate['birth'][-1].nbLin.append(tmpNbLin)
+						tmpNbLin += 1
+
+		self.addResultsToSelf(res)
+		res.selectedTree = self.treeId
+		return res
+
+	# Integral of kernel should be equal to 1
+	def _computeSmoothedRate(self, signal, kernelFunc, maxTime, nbSteps = 100):
+		res = Results()
+		res.time = np.linspace(0, maxTime, num = nbSteps)
+		res.rate = []
+		for t in res.time:
+			tmp = 0
+			for i, t2 in enumerate(signal.time):
+				kv = kernelFunc(t2-t)
+				tmp += kv * signal.rate[i] / signal.nbLin[i]
+			res.rate.append(tmp)
 		return res
 
 	def _getInnerLayout(self):
 		if hasattr(self, 'trees') and self.treeId < len(self.trees):
-			fig = PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay)
+			figTree = PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay)
+			figTree['layout']['xaxis'] = dict(range=(0, self.selectedMaxTime))
+			figAvgRate = self._getAvgRateFigure()
 		else:
-			fig = {}
-		graph = dcc.Graph(
+			figTree = {}
+			figAvgRate = {}
+		graphTree = dcc.Graph(
 			style={'width':'100%'},
 			id=self._getElemId('innerLayout', 'treeGraph'), 
-			figure=fig)
+			figure=figTree)
+		graphAvgRate = dcc.Graph(
+			style={'width':'100%'},
+			id=self._getElemId('innerLayout', 'avgRateGraph'), 
+			figure=figAvgRate)
 		#TODO TMP
-		return html.Div([graph, html.Div(id='testTmp3')])
+		return html.Div([graphTree, graphAvgRate, html.Div(id='testTmp3')])
+	
+	def _getAvgRateFigure(self, selectedClade = None):
+		sigma = self.selectedMaxTime * self.filterWidth
+		kernel = lambda d: np.exp(-0.5*(d/sigma)**2)/(sigma*(2*np.pi)**0.5)
+		for name in RateNames:
+			self.smoothedRate[name][self.treeId] = self._computeSmoothedRate(self.rawRate[name][self.treeId], kernel, self.selectedMaxTime)
 
-	def getTreeGraphCallback(self):
+		rawBirth = go.Scatter(x = self.rawRate['birth'][self.treeId].time, y=[0]*len(self.rawRate['birth'][self.treeId].rate), 
+			mode='markers', marker=dict(color='green'), hoverinfo='none', showlegend=False)
+		smoothedBirth = go.Scatter(x = self.smoothedRate['birth'][self.treeId].time, y=self.smoothedRate['birth'][self.treeId].rate, 
+			mode='lines', line=dict(color='green'), name='birth rate')
+
+		rawDeath = go.Scatter(x = self.rawRate['death'][self.treeId].time, y=[0]*len(self.rawRate['death'][self.treeId].rate), 
+			mode='markers', marker=dict(color='red'), hoverinfo='none', showlegend=False)
+		smoothedDeath = go.Scatter(x = self.smoothedRate['death'][self.treeId].time, y=self.smoothedRate['death'][self.treeId].rate, 
+			mode='lines', line=dict(color='red'), name='death rate')
+		# Compute avg birth and death rate for selected clade
+		# TODO
+		layout = go.Layout(xaxis=dict(range=(0, self.selectedMaxTime)))
+		return dict(data=[smoothedBirth, smoothedDeath, rawBirth, rawDeath], layout=layout)
+
+	def _getTreeGraphCallback(self):
 		def PlotTree(treeId):
 			if hasattr(self, 'trees') and self.treeId < len(self.trees):
-				return PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay)
+				self.selectedMaxTime = max(nd.age for nd in self.trees[self.treeId])
+				treeFig = PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay)
+				treeFig['layout']['xaxis'] = dict(range=(0, self.selectedMaxTime))
+				return treeFig
 			else:
 				return {}
 		return PlotTree
 
+	def _getCladeSelectionCallback(self):
+		def CladeSelect(hoverData, treeFig):
+			ind = 0 if hoverData is None else hoverData['points'][0]['pointIndex']
+			return self._getAvgRateFigure(ind)
+		return CladeSelect
+
 	def _buildInnerLayoutSignals(self, app):
 		app.callback(
 			Output(self._getElemId('innerLayout', 'treeGraph'), 'figure'), 
-			[Input(self._uselessDivIds['anyParamChange'], 'children')])(self.getTreeGraphCallback())
-			#[Input(self._getElemId('params', 'treeId'), 'value')])(self.getTreeGraphCallback())
+			[Input(self._uselessDivIds['anyParamChange'], 'children')])(self._getTreeGraphCallback())
+		app.callback(
+			Output(self._getElemId('innerLayout', 'avgRateGraph'), 'figure'),
+			[
+				Input(self._getElemId('innerLayout', 'treeGraph'), 'hoverData'), 
+				Input(self._getElemId('innerLayout', 'treeGraph'), 'figure')
+			])(self._getCladeSelectionCallback())
 		#TODO TMP
 		app.callback(
 			Output('testTmp3', 'children'),

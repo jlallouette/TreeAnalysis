@@ -119,6 +119,7 @@ class NonNeutralTreeGenerator(TreeGenerator):
 				extant_tips.append(c2)
 			else:
 				extant_tips.remove(nd)
+				setattr(nd, 'is_extinct', True)
 
 		# Get last nodes generated (a cherry with branch lenghts = 0) and replace a cherry by one single node
 		#lastleaf=[n for n in tree.leaf_nodes() if n.edge_length == 0][0]

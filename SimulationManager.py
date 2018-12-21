@@ -21,12 +21,16 @@ class SimulationManager:
 	def GetKeyTuple(self, simRunner):
 		return (type(simRunner).__name__,) + simRunner.GetParamKeyTuple()
 
-	def GetSimulationResult(self, simRunner):
-		kt = self.GetKeyTuple(simRunner)
-		if kt not in self.simulations:
-			print('Running simulation')
-			self.simulations[kt] = simRunner.Simulate()
-		return self.simulations[kt]
+	def GetSimulationResult(self, simRunner, useMemoization = False):
+		if useMemoization:
+			kt = self.GetKeyTuple(simRunner)
+			if kt not in self.simulations:
+				print('Running simulation')
+				self.simulations[kt] = simRunner.Simulate()
+			self.SaveSimulations()
+			return self.simulations[kt]
+		else:
+			return simRunner.Simulate()
 
 # Interface for simulation runner classes
 class SimulationRunner(Parameterizable, Usable):

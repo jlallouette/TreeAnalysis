@@ -27,3 +27,25 @@ class TreeStatSimulation(SimulationRunner, DashInterfacable):
 			res.trees.append(t)
 		return res
 
+from dendropy import Tree
+import os
+class TreeLoaderSim(SimulationRunner, DashInterfacable):
+	def __init__(self):
+		SimulationRunner.__init__(self)
+		DashInterfacable.__init__(self)
+
+	def GetDefaultParams(self):
+		return ParametersDescr({
+			'path' : ('data/apes.nwk', str)
+		})
+
+	def Simulate(self):
+		res = Results()
+		if os.path.isfile(self.path):
+			try:
+				with open(self.path, 'r') as f:
+					res.trees = [Tree.get(file=f, schema='newick', tree_offset=0)]
+			except:
+				pass
+		return res
+

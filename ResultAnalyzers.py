@@ -67,32 +67,36 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 
 	def GetDefaultParams(self):
 		return ParametersDescr({
-			'treeId' : (1, int),
+			'treeId' : (0, int),
 			'rateToDisplay': ('birth', str, ['birth', 'death']),
 			'filterWidth': (0.05,),
 		})
 
 	def Analyze(self, results):
 		self.addResultsToSelf(results)
-		res = Results()
-
-		if self.treeId < len(self.trees):
-			t = self.trees[self.treeId]
-			t.calc_node_root_distances()
-			t.calc_node_ages(set_node_age_fn = lambda n: t.seed_node.edge.length + n.root_distance)
-			self.selectedMaxTime = max(nd.age for nd in t)
+		if not hasattr(self, 'trees'):
+			return Results()
 		else:
-			self.selectedMaxTime = 1
+			res = Results()
+			ageFunc = lambda n: (t.seed_node.edge.length if t.seed_node.edge.length is not None else 0) + n.root_distance
 
-		res.rawRate = {name:[] for name in RateNames}
-		for i, t in enumerate(self.trees):
-			t.calc_node_root_distances()
-			t.calc_node_ages(set_node_age_fn = lambda n: t.seed_node.edge.length + n.root_distance)
-			self._fillRawRateData(t.seed_node, res)
+			if self.treeId < len(self.trees):
+				t = self.trees[self.treeId]
+				t.calc_node_root_distances()
+				t.calc_node_ages(set_node_age_fn = ageFunc)
+				self.selectedMaxTime = max(nd.age for nd in t)
+			else:
+				self.selectedMaxTime = 1
 
-		self.addResultsToSelf(res)
-		res.selectedTree = self.treeId
-		return res
+			res.rawRate = {name:[] for name in RateNames}
+			for i, t in enumerate(self.trees):
+				t.calc_node_root_distances()
+				t.calc_node_ages(set_node_age_fn = ageFunc)
+				self._fillRawRateData(t.seed_node, res)
+
+			self.addResultsToSelf(res)
+			res.selectedTree = self.treeId
+			return res
 
 	def _fillRawRateData(self, node, res):
 		# TODO Find some way to auto-compute epsilon
@@ -156,41 +160,47 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 		return html.Div([graphTree, graphAvgRate])
 
 	def _getTreeFigure(self, cladeInd = None):
-		treeFig = PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay, selectCladeInd = cladeInd)
-		treeFig['layout']['margin'] = dict(r=50, b=30, pad=4, l=50, t=50)
-		return treeFig
+		if not hasattr(self, 'trees'):
+			return {}
+		else:
+			treeFig = PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay, selectCladeInd = cladeInd)
+			treeFig['layout']['margin'] = dict(r=50, b=30, pad=4, l=50, t=50)
+			return treeFig
 	
 	def _getAvgRateFigure(self, selectedClade = None):
-		sigma = self.selectedMaxTime * self.filterWidth
-		kernel = lambda d: np.exp(-0.5*(d/sigma)**2)/(sigma*(2*np.pi)**0.5)
-		for name in RateNames:
-			self.smoothedRate[name][self.treeId] = self._computeSmoothedRate(self.rawRate[name][self.treeId], kernel, self.selectedMaxTime)
+		if not hasattr(self, 'trees'):
+			return {}
+		else:
+			sigma = self.selectedMaxTime * self.filterWidth
+			kernel = lambda d: np.exp(-0.5*(d/sigma)**2)/(sigma*(2*np.pi)**0.5)
+			for name in RateNames:
+				self.smoothedRate[name][self.treeId] = self._computeSmoothedRate(self.rawRate[name][self.treeId], kernel, self.selectedMaxTime)
 
-		allTraces = []
-		if selectedClade is not None:
-			res = Results()
-			res.rawRate = {name:[] for name in RateNames}
-			self._fillRawRateData(self.trees[self.treeId].nodes()[selectedClade], res)
-			smoothedCladeBirth = self._computeSmoothedRate(res.rawRate['birth'][0], kernel, self.selectedMaxTime)
-			smoothedCladeDeath = self._computeSmoothedRate(res.rawRate['death'][0], kernel, self.selectedMaxTime)
-			allTraces.append(go.Scatter(x = smoothedCladeBirth.time, y=smoothedCladeBirth.rate, 
-				mode='lines', line=dict(color='green', dash='dash'), name='clade birth rate'))
-			allTraces.append(go.Scatter(x = smoothedCladeDeath.time, y=smoothedCladeDeath.rate, 
-				mode='lines', line=dict(color='red', dash='dash'), name='clade death rate'))
+			allTraces = []
+			if selectedClade is not None:
+				res = Results()
+				res.rawRate = {name:[] for name in RateNames}
+				self._fillRawRateData(self.trees[self.treeId].nodes()[selectedClade], res)
+				smoothedCladeBirth = self._computeSmoothedRate(res.rawRate['birth'][0], kernel, self.selectedMaxTime)
+				smoothedCladeDeath = self._computeSmoothedRate(res.rawRate['death'][0], kernel, self.selectedMaxTime)
+				allTraces.append(go.Scatter(x = smoothedCladeBirth.time, y=smoothedCladeBirth.rate, 
+					mode='lines', line=dict(color='green', dash='dash'), name='clade birth rate'))
+				allTraces.append(go.Scatter(x = smoothedCladeDeath.time, y=smoothedCladeDeath.rate, 
+					mode='lines', line=dict(color='red', dash='dash'), name='clade death rate'))
 
-		allTraces.append(go.Scatter(x = self.rawRate['birth'][self.treeId].time, y=[0]*len(self.rawRate['birth'][self.treeId].rate), 
-			mode='markers', marker=dict(color='green'), hoverinfo='none', showlegend=False))
-		allTraces.append(go.Scatter(x = self.smoothedRate['birth'][self.treeId].time, y=self.smoothedRate['birth'][self.treeId].rate, 
-			mode='lines', line=dict(color='green'), name='birth rate'))
+			allTraces.append(go.Scatter(x = self.rawRate['birth'][self.treeId].time, y=[0]*len(self.rawRate['birth'][self.treeId].rate), 
+				mode='markers', marker=dict(color='green'), hoverinfo='none', showlegend=False))
+			allTraces.append(go.Scatter(x = self.smoothedRate['birth'][self.treeId].time, y=self.smoothedRate['birth'][self.treeId].rate, 
+				mode='lines', line=dict(color='green'), name='birth rate'))
 
-		allTraces.append(go.Scatter(x = self.rawRate['death'][self.treeId].time, y=[0]*len(self.rawRate['death'][self.treeId].rate), 
-			mode='markers', marker=dict(color='red'), hoverinfo='none', showlegend=False))
-		allTraces.append(go.Scatter(x = self.smoothedRate['death'][self.treeId].time, y=self.smoothedRate['death'][self.treeId].rate, 
-			mode='lines', line=dict(color='red'), name='death rate'))
+			allTraces.append(go.Scatter(x = self.rawRate['death'][self.treeId].time, y=[0]*len(self.rawRate['death'][self.treeId].rate), 
+				mode='markers', marker=dict(color='red'), hoverinfo='none', showlegend=False))
+			allTraces.append(go.Scatter(x = self.smoothedRate['death'][self.treeId].time, y=self.smoothedRate['death'][self.treeId].rate, 
+				mode='lines', line=dict(color='red'), name='death rate'))
 
-		layout = go.Layout(xaxis=dict(range=(0, self.selectedMaxTime)), margin=dict(r=50, b=30, pad=4, l=50, t=50), legend=dict(x=0.05,y=0.95))
+			layout = go.Layout(xaxis=dict(range=(0, self.selectedMaxTime)), margin=dict(r=50, b=30, pad=4, l=50, t=50), legend=dict(x=0.05,y=0.95))
 
-		return dict(data=allTraces, layout=layout)
+			return dict(data=allTraces, layout=layout)
 
 	def _getTreeGraphCallback(self):
 		def PlotTree(treeId, clickData):

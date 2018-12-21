@@ -13,14 +13,14 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 
 	def GetDefaultParams(self):
 		return ParametersDescr({
+			'memoize': (False, bool,)
 		})
 
 	@Usable.Clickable('special', 'innerLayout', 'children')
 	def Analyze(self):
 		res = Results()
 		for sim in self.simulations:
-			res += self.simManager.GetSimulationResult(sim)
-		self.simManager.SaveSimulations()
+			res += self.simManager.GetSimulationResult(sim, self.memoize)
 
 		for analyzer in self.analyzers:
 			res += analyzer.Analyze(res)
@@ -55,6 +55,8 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 						app.callback(Output(toUpdt._getElemId('special', 'innerLayout'), 'children'), 
 							[Input(ra._uselessDivIds['anyParamChange'], 'children')])(toUpdt._getUpdateOnModifCallback(ra))
 
+	def AddSimulation(self, sim):
+		self.simulations.append(sim)
 
 	def AddAnalyzer(self, analyzer):
 		deps = analyzer.DependsOn()

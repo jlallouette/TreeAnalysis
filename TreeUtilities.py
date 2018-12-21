@@ -2,6 +2,9 @@ import math
 
 import plotly.graph_objs as go
 
+import sys
+sys.setrecursionlimit(10000)
+
 leafWidth = 1
 #birthRateColorScale = [[0, 'rgb(0, 0, 255)'],[0.5, 'rgb(127, 127, 127)'],[1, 'rgb(255, 0, 0)']]
 birthRateColorScale = [[0, 'rgb(0,0,131)'], [0.125, 'rgb(0,60,170)'],
@@ -14,7 +17,7 @@ class NodePlotter:
 		self.node = node
 		self.parent = parent
 		if self.parent is None:
-			self.time = self.node.edge.length
+			self.time = self.node.edge.length if self.node.edge.length is not None else 0
 		else:
 			self.time = parent.time + self.node.edge.length
 

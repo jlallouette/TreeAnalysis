@@ -72,10 +72,15 @@ class NodePlotter:
 	def GetColor(self):
 		return 'rgb(0,0,0)'
 
-	def GetSplitColor(self):
-		return 'rgb(0,0,0)'
+	def IsInClade(self, cladeInd):
+		tmp = self
+		isInClade = False
+		while not isInClade and tmp is not None:
+			isInClade = (tmp.node.cladeInd == cladeInd)
+			tmp = tmp.parent
+		return isInClade
 
-	def GetPlotElem(self):
+	def GetPlotElem(self, selectCladeInd = None):
 		nodes = dict(type='scatter',
 			x=self.GetAllAttr('time'),
 			y=self.GetAllAttr('xpos'),
@@ -88,15 +93,12 @@ class NodePlotter:
 			hoverinfo='',
 			name='allNodes'
 		)
-		allSplits = []
-		for n in self.GetAllNodes():
-			allSplits.append(dict(x0=n.time, x1=n.time, y0=n.brLeft, y1=n.brRight, type='line', layer='below', line=dict(color=self.GetSplitColor(),width=self.splitWidth)))
 
 		allEdges = []
 		for edge in self.GetAllAttr('edge'):
-			allEdges += edge.GetPlotElem(self.minRate, self.maxRate)
+			allEdges += edge.GetPlotElem(self.minRate, self.maxRate, selectCladeInd)
 
-		layout = dict(title='Tree Plot', shapes = allSplits + allEdges, xaxis=dict(showgrid=False), yaxis=dict(showgrid=False), hovermode='closest')
+		layout = dict(title='Tree Plot', shapes = allEdges, xaxis=dict(showgrid=False), yaxis=dict(showgrid=False), hovermode='closest')
 		return [nodes], layout
 
 class EdgePlotter:
@@ -128,9 +130,9 @@ class EdgePlotter:
 		self.minRate = min(self.allRates) if len(self.allRates) > 0 else 0
 		self.maxRate = max(self.allRates) if len(self.allRates) > 0 else 0
 
-	def GetColor(self, rate = None, minRate = None, maxRate = None):
+	def GetColor(self, rate = None, minRate = None, maxRate = None, inClade = True):
 		if rate is None or maxRate - minRate == 0:
-			return 'rgb(0,0,0)'
+			return 'rgb(0,0,0)' if inClade else 'rgb(128,128,128)'
 		else:
 			currVal = (rate-minRate)/(maxRate-minRate)
 			for v1, v2 in zip(birthRateColorScale, birthRateColorScale[1:]):
@@ -139,22 +141,35 @@ class EdgePlotter:
 					c2 = [float(v) for v in v2[1][4:-1].split(',')]
 					relVal = (currVal-v1[0])/(v2[0]-v1[0])
 					c3 = [int((v2-v1)*relVal+v1) for v1, v2 in zip(c1, c2)]
-					return 'rgb({},{},{})'.format(*c3)
+					if inClade:
+						return 'rgb({},{},{})'.format(*c3)
+					else:
+						return 'rgb({0},{0},{0})'.format(sum(coeff*v for coeff, v in zip([0.2989, 0.5870, 0.1140], c3)))
 			return birthRateColorScale[-1][1]
 
-	def GetPlotElem(self, minRate, maxRate):
+	def GetPlotElem(self, minRate, maxRate, selectCladeInd = None):
+		if self.parent is not None:
+			inClade = self.parent.IsInClade(selectCladeInd) if selectCladeInd is not None else True
+		else:
+			inClade = True if selectCladeInd is None or selectCladeInd == 0 else False
 		allSegments = []
 		if len(self.allRates) == 0:
-			allSegments.append(dict(x0=self.startTime, x1=self.endTime, y0=self.x, y1=self.x, type='line', layer='below', line=dict(color=self.GetColor(),width=self.edgeWidth)))
+			if self.parent is not None:
+				allSegments.append(dict(x0=self.allTimes[0], x1=self.allTimes[0], y0=self.x, y1=self.parent.xpos, type='line', layer='below', line=dict(color=self.GetColor(inClade=inClade),width=self.edgeWidth)))
+			allSegments.append(dict(x0=self.startTime, x1=self.endTime, y0=self.x, y1=self.x, type='line', layer='below', line=dict(color=self.GetColor(inClade = inClade),width=self.edgeWidth)))
 		else:
+			if self.parent is not None:
+				allSegments.append(dict(x0=self.allTimes[0], x1=self.allTimes[0], y0=self.x, y1=self.parent.xpos, type='line', layer='below', line=dict(color=self.GetColor(self.allRates[0], minRate, maxRate, inClade),width=self.edgeWidth)))
 			for i, rate in enumerate(self.allRates):
-				allSegments.append(dict(x0=self.allTimes[i], x1=self.allTimes[i+1], y0=self.x, y1=self.x, type='line', layer='below', line=dict(color=self.GetColor(rate, minRate, maxRate),width=self.edgeWidth)))
+				allSegments.append(dict(x0=self.allTimes[i], x1=self.allTimes[i+1], y0=self.x, y1=self.x, type='line', layer='below', line=dict(color=self.GetColor(rate, minRate, maxRate, inClade),width=self.edgeWidth)))
 		return allSegments
 
-def PlotTreeInNewFig(tree, rateToDisplay = 'birth'):
+def PlotTreeInNewFig(tree, rateToDisplay = 'birth', selectCladeInd = None):
+	for i, nd in enumerate(tree):
+		nd.cladeInd = i
 	tp = NodePlotter(tree.seed_node, EdgePlotter, rateToDisplay=rateToDisplay)
 	tp.ComputeAll()
-	nodes, layout = tp.GetPlotElem()
+	nodes, layout = tp.GetPlotElem(selectCladeInd = selectCladeInd)
 	return dict(data=nodes, layout=layout)
 
 

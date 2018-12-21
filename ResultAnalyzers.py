@@ -85,35 +85,38 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 			self.selectedMaxTime = 1
 
 		res.rawRate = {name:[] for name in RateNames}
-		# TODO Find some way to auto-compute epsilon
-		epsilon = 0.00001
 		for i, t in enumerate(self.trees):
 			t.calc_node_root_distances()
 			t.calc_node_ages(set_node_age_fn = lambda n: t.seed_node.edge.length + n.root_distance)
-			stTotTime = max(nd.age for nd in t)
-			sigs = Results()
-			sigs.time = []
-			sigs.rate = []
-			sigs.nbLin = []
-			res.rawRate['birth'].append(sigs)
-			res.rawRate['death'].append(copy.deepcopy(sigs))
-			tmpNbLin = 1
-			for n in t.ageorder_node_iter(include_leaves = True):
-				if stTotTime - n.age > epsilon:
-					if n.is_leaf():
-						res.rawRate['death'][-1].time.append(n.age)
-						res.rawRate['death'][-1].rate.append(1)
-						res.rawRate['death'][-1].nbLin.append(tmpNbLin)
-						tmpNbLin -= 1
-					else:
-						res.rawRate['birth'][-1].time.append(n.age)
-						res.rawRate['birth'][-1].rate.append(1)
-						res.rawRate['birth'][-1].nbLin.append(tmpNbLin)
-						tmpNbLin += 1
+			self._fillRawRateData(t.seed_node, res)
 
 		self.addResultsToSelf(res)
 		res.selectedTree = self.treeId
 		return res
+
+	def _fillRawRateData(self, node, res):
+		# TODO Find some way to auto-compute epsilon
+		epsilon = 0.00001
+		stTotTime = max(nd.age for nd in node.leaf_nodes())
+		sigs = Results()
+		sigs.time = []
+		sigs.rate = []
+		sigs.nbLin = []
+		res.rawRate['birth'].append(sigs)
+		res.rawRate['death'].append(copy.deepcopy(sigs))
+		tmpNbLin = 1
+		for n in node.ageorder_iter(include_leaves = True):
+			if stTotTime - n.age > epsilon:
+				if n.is_leaf():
+					res.rawRate['death'][-1].time.append(n.age)
+					res.rawRate['death'][-1].rate.append(1)
+					res.rawRate['death'][-1].nbLin.append(tmpNbLin)
+					tmpNbLin -= 1
+				else:
+					res.rawRate['birth'][-1].time.append(n.age)
+					res.rawRate['birth'][-1].rate.append(1)
+					res.rawRate['birth'][-1].nbLin.append(tmpNbLin)
+					tmpNbLin += 1
 
 	# Integral of kernel should be equal to 1
 	def _computeSmoothedRate(self, signal, kernelFunc, maxTime, nbSteps = 100):
@@ -144,8 +147,7 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 			style={'width':'100%'},
 			id=self._getElemId('innerLayout', 'avgRateGraph'), 
 			figure=figAvgRate)
-		#TODO TMP
-		return html.Div([graphTree, graphAvgRate, html.Div(id='testTmp3')])
+		return html.Div([graphTree, graphAvgRate])
 	
 	def _getAvgRateFigure(self, selectedClade = None):
 		sigma = self.selectedMaxTime * self.filterWidth
@@ -153,25 +155,38 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 		for name in RateNames:
 			self.smoothedRate[name][self.treeId] = self._computeSmoothedRate(self.rawRate[name][self.treeId], kernel, self.selectedMaxTime)
 
-		rawBirth = go.Scatter(x = self.rawRate['birth'][self.treeId].time, y=[0]*len(self.rawRate['birth'][self.treeId].rate), 
-			mode='markers', marker=dict(color='green'), hoverinfo='none', showlegend=False)
-		smoothedBirth = go.Scatter(x = self.smoothedRate['birth'][self.treeId].time, y=self.smoothedRate['birth'][self.treeId].rate, 
-			mode='lines', line=dict(color='green'), name='birth rate')
+		allTraces = []
+		if selectedClade is not None:
+			res = Results()
+			res.rawRate = {name:[] for name in RateNames}
+			self._fillRawRateData(self.trees[self.treeId].nodes()[selectedClade], res)
+			smoothedCladeBirth = self._computeSmoothedRate(res.rawRate['birth'][0], kernel, self.selectedMaxTime)
+			smoothedCladeDeath = self._computeSmoothedRate(res.rawRate['death'][0], kernel, self.selectedMaxTime)
+			allTraces.append(go.Scatter(x = smoothedCladeBirth.time, y=smoothedCladeBirth.rate, 
+				mode='lines', line=dict(color='green', dash='dash'), name='clade birth rate'))
+			allTraces.append(go.Scatter(x = smoothedCladeDeath.time, y=smoothedCladeDeath.rate, 
+				mode='lines', line=dict(color='red', dash='dash'), name='clade death rate'))
 
-		rawDeath = go.Scatter(x = self.rawRate['death'][self.treeId].time, y=[0]*len(self.rawRate['death'][self.treeId].rate), 
-			mode='markers', marker=dict(color='red'), hoverinfo='none', showlegend=False)
-		smoothedDeath = go.Scatter(x = self.smoothedRate['death'][self.treeId].time, y=self.smoothedRate['death'][self.treeId].rate, 
-			mode='lines', line=dict(color='red'), name='death rate')
-		# Compute avg birth and death rate for selected clade
-		# TODO
+		allTraces.append(go.Scatter(x = self.rawRate['birth'][self.treeId].time, y=[0]*len(self.rawRate['birth'][self.treeId].rate), 
+			mode='markers', marker=dict(color='green'), hoverinfo='none', showlegend=False))
+		allTraces.append(go.Scatter(x = self.smoothedRate['birth'][self.treeId].time, y=self.smoothedRate['birth'][self.treeId].rate, 
+			mode='lines', line=dict(color='green'), name='birth rate'))
+
+		allTraces.append(go.Scatter(x = self.rawRate['death'][self.treeId].time, y=[0]*len(self.rawRate['death'][self.treeId].rate), 
+			mode='markers', marker=dict(color='red'), hoverinfo='none', showlegend=False))
+		allTraces.append(go.Scatter(x = self.smoothedRate['death'][self.treeId].time, y=self.smoothedRate['death'][self.treeId].rate, 
+			mode='lines', line=dict(color='red'), name='death rate'))
+
 		layout = go.Layout(xaxis=dict(range=(0, self.selectedMaxTime)))
-		return dict(data=[smoothedBirth, smoothedDeath, rawBirth, rawDeath], layout=layout)
+
+		return dict(data=allTraces, layout=layout)
 
 	def _getTreeGraphCallback(self):
-		def PlotTree(treeId):
+		def PlotTree(treeId, clickData):
+			ind = None if clickData is None else clickData['points'][0]['pointIndex']
 			if hasattr(self, 'trees') and self.treeId < len(self.trees):
 				self.selectedMaxTime = max(nd.age for nd in self.trees[self.treeId])
-				treeFig = PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay)
+				treeFig = PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay, selectCladeInd = ind)
 				treeFig['layout']['xaxis'] = dict(range=(0, self.selectedMaxTime))
 				return treeFig
 			else:
@@ -187,17 +202,16 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 	def _buildInnerLayoutSignals(self, app):
 		app.callback(
 			Output(self._getElemId('innerLayout', 'treeGraph'), 'figure'), 
-			[Input(self._uselessDivIds['anyParamChange'], 'children')])(self._getTreeGraphCallback())
+			[
+				Input(self._uselessDivIds['anyParamChange'], 'children'),
+				Input(self._getElemId('innerLayout', 'treeGraph'), 'clickData')
+			])(self._getTreeGraphCallback())
 		app.callback(
 			Output(self._getElemId('innerLayout', 'avgRateGraph'), 'figure'),
 			[
-				Input(self._getElemId('innerLayout', 'treeGraph'), 'hoverData'), 
+				Input(self._getElemId('innerLayout', 'treeGraph'), 'clickData'), 
 				Input(self._getElemId('innerLayout', 'treeGraph'), 'figure')
 			])(self._getCladeSelectionCallback())
-		#TODO TMP
-		app.callback(
-			Output('testTmp3', 'children'),
-			[Input(self._getElemId('innerLayout', 'treeGraph'), 'hoverData')])(lambda x:json.dumps(x,indent=2))
 
 class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 	def __init__(self):

@@ -81,9 +81,11 @@ class NodePlotter:
 		return isInClade
 
 	def GetPlotElem(self, selectCladeInd = None):
+		allX = self.GetAllAttr('time')
+		allY = self.GetAllAttr('xpos')
 		nodes = dict(type='scatter',
-			x=self.GetAllAttr('time'),
-			y=self.GetAllAttr('xpos'),
+			x=allX,
+			y=allY,
 			mode='markers',
 			marker=dict(color=[0 for v in self.GetAllAttr('time')], size=5, 
 						colorscale=birthRateColorScale,showscale=True, cauto=False, 
@@ -98,7 +100,7 @@ class NodePlotter:
 		for edge in self.GetAllAttr('edge'):
 			allEdges += edge.GetPlotElem(self.minRate, self.maxRate, selectCladeInd)
 
-		layout = dict(title='Tree Plot', shapes = allEdges, xaxis=dict(showgrid=False), yaxis=dict(showgrid=False), hovermode='closest')
+		layout = dict(shapes = allEdges, xaxis=dict(showgrid=False, title=dict(text='Time'), range = (0, max(allX)*1.01), ticklen=5, tickwidth=1), yaxis=dict(showgrid=False, showticklabels=False, range=(0, max(allY)+leafWidth/2), autorange=False), hovermode='closest')
 		return [nodes], layout
 
 class EdgePlotter:

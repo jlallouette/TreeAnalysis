@@ -218,7 +218,7 @@ class DashInterfacable(Interfacable):
 						
 
 	# Returns the current layout
-	def GetLayout(self, hideParams = False, hideUsage = False, hideFull = False):
+	def GetLayout(self, hideParams = False, hideUsage = False, hideFull = False, hideTitle = False):
 		print('getting Layout for {}'.format(self))
 		params = []
 		uses = []
@@ -274,7 +274,7 @@ class DashInterfacable(Interfacable):
 				allSavkKeys = []
 				if isinstance(currVal, Interfacable):
 					# Add the visible one
-					subLayouts.append(currVal.GetLayout())
+					subLayouts.append(currVal.GetLayout(hideTitle = True))
 					savk = self._getSubAuthValKey(name, type(currVal))
 					allSavkKeys.append(savk)
 					if savk not in self.subAuthValsObj:
@@ -287,7 +287,7 @@ class DashInterfacable(Interfacable):
 							allSavkKeys.append(savk)
 							if savk not in self.subAuthValsObj:
 								self.subAuthValsObj[savk] = av()
-							subLayouts.append(self.subAuthValsObj[savk].GetLayout(hideFull = True))
+							subLayouts.append(self.subAuthValsObj[savk].GetLayout(hideFull = True, hideTitle=True))
 				if len(subLayouts) > 0:
 					ddDivId = self._getElemId('dropDownDiv', name)
 					params.append(html.Div(subLayouts, id=ddDivId))#, style={'border-style':'solid', 'border-width':'1px'}))
@@ -307,11 +307,13 @@ class DashInterfacable(Interfacable):
 		innerElem = html.Div(self._getInnerLayout(), id=self._getElemId('special', 'innerLayout'))
 
 		# Build Final Layout
-		# TODO Write different layout arrangements
 		paramStyle = {'display': 'none' if hideParams else 'inline-block'}
 		useStyle = {'display': 'none' if hideUsage else 'inline-block'}
 		fullStyle = {'display':'none' if hideFull else 'inline-block'}
+		titleStyle = {'display':'none' if hideTitle else 'inline-block'}
 		uselessStyle = {'display':'none'}
+
+		titleDiv = html.Div(html.H5(self.__class__.__name__), style=titleStyle)
 
 		uselessDivs = [html.Div(id=idv, style=uselessStyle, children='') for nm, idv in self._uselessDivIds.items()]
 
@@ -320,7 +322,7 @@ class DashInterfacable(Interfacable):
 			controlDivs.append(self._getCustomLayout('uses').GetLayout(uses, style=useStyle))
 		controls = self._getCustomLayout('controls').GetLayout(controlDivs)
 
-		allDivs = uselessDivs + [controls]
+		allDivs = [titleDiv] + uselessDivs + [controls]
 		if innerElem is not None:
 			allDivs.append(innerElem)
 

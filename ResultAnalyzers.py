@@ -69,7 +69,7 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 		return ParametersDescr({
 			'treeId' : (1, int),
 			'rateToDisplay': ('birth', str, ['birth', 'death']),
-			'filterWidth': (0.1,),
+			'filterWidth': (0.05,),
 		})
 
 	def Analyze(self, results):
@@ -122,19 +122,25 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 	def _computeSmoothedRate(self, signal, kernelFunc, maxTime, nbSteps = 100):
 		res = Results()
 		res.time = np.linspace(0, maxTime, num = nbSteps)
+
+		# Compute partial kernel integral for border effect correction
+		dt = res.time[1]-res.time[0]
+		kernInteg = [sum(kernelFunc(t-res.time[0]) for t in res.time)*dt]
+		for i, t in enumerate(res.time[1:]):
+			kernInteg.append(kernInteg[-1] + dt *(-kernelFunc((nbSteps-1-i)*dt) + kernelFunc(-(i+1)*dt)))
+
 		res.rate = []
-		for t in res.time:
+		for j, t in enumerate(res.time):
 			tmp = 0
 			for i, t2 in enumerate(signal.time):
 				kv = kernelFunc(t2-t)
 				tmp += kv * signal.rate[i] / signal.nbLin[i]
-			res.rate.append(tmp)
+			res.rate.append(tmp / kernInteg[j])
 		return res
 
 	def _getInnerLayout(self):
 		if hasattr(self, 'trees') and self.treeId < len(self.trees):
-			figTree = PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay)
-			figTree['layout']['xaxis'] = dict(range=(0, self.selectedMaxTime))
+			figTree = self._getTreeFigure()
 			figAvgRate = self._getAvgRateFigure()
 		else:
 			figTree = {}
@@ -148,6 +154,11 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 			id=self._getElemId('innerLayout', 'avgRateGraph'), 
 			figure=figAvgRate)
 		return html.Div([graphTree, graphAvgRate])
+
+	def _getTreeFigure(self, cladeInd = None):
+		treeFig = PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay, selectCladeInd = cladeInd)
+		treeFig['layout']['margin'] = dict(r=50, b=30, pad=4, l=50, t=50)
+		return treeFig
 	
 	def _getAvgRateFigure(self, selectedClade = None):
 		sigma = self.selectedMaxTime * self.filterWidth
@@ -177,7 +188,7 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 		allTraces.append(go.Scatter(x = self.smoothedRate['death'][self.treeId].time, y=self.smoothedRate['death'][self.treeId].rate, 
 			mode='lines', line=dict(color='red'), name='death rate'))
 
-		layout = go.Layout(xaxis=dict(range=(0, self.selectedMaxTime)))
+		layout = go.Layout(xaxis=dict(range=(0, self.selectedMaxTime)), margin=dict(r=50, b=30, pad=4, l=50, t=50), legend=dict(x=0.05,y=0.95))
 
 		return dict(data=allTraces, layout=layout)
 
@@ -186,9 +197,7 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 			ind = None if clickData is None else clickData['points'][0]['pointIndex']
 			if hasattr(self, 'trees') and self.treeId < len(self.trees):
 				self.selectedMaxTime = max(nd.age for nd in self.trees[self.treeId])
-				treeFig = PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay, selectCladeInd = ind)
-				treeFig['layout']['xaxis'] = dict(range=(0, self.selectedMaxTime))
-				return treeFig
+				return self._getTreeFigure(ind)
 			else:
 				return {}
 		return PlotTree

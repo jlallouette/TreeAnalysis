@@ -41,9 +41,9 @@ class InputOutput:
 		return []
 
 # Interface for simulation runner classes
-class SimulationRunner(Parameterizable, Usable, InputOutput):
+class SimulationRunner(AppParameterizable, Usable, InputOutput):
 	def __init__(self):
-		Parameterizable.__init__(self)
+		AppParameterizable.__init__(self)
 		Usable.__init__(self)
 		InputOutput.__init__(self)
 

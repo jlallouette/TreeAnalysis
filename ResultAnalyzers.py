@@ -2,12 +2,12 @@ from Utilities import *
 from Simulations import *
 
 # Result analyzer ABC
-class ResultAnalyzer(Parameterizable, InputOutput):
+class ResultAnalyzer(AppParameterizable, InputOutput):
 	def __init__(self):
-		Parameterizable.__init__(self)
+		AppParameterizable.__init__(self)
 		InputOutput.__init__(self)
 		self._toUpdateOnModif = []
-		self.appOwner = None
+		self.results = Results(self)
 
 	# Returns a new result object containing newly computed values
 	@abstractmethod
@@ -47,10 +47,6 @@ class ResultAnalyzer(Parameterizable, InputOutput):
 	def _update(self, source):
 		pass
 
-	# Sets the subclass of GenericApp that owns it
-	def setAppOwner(self, appOwner):
-		self.appOwner = appOwner
-		
 
 # TMP TODO Maybe move to another file?
 import dendropy
@@ -71,47 +67,45 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 
 		self._setCustomLayout('params', DashHorizontalLayout())
 		self.smoothedRate = {name:{} for name in RateNames}
+		self.maxTimes = {}
 
 	def GetDefaultParams(self):
 		dct = {
 			'treeId' : (0, int),
 			'rateToDisplay': ('birth', str, ['birth', 'death']),
 			'filterWidth': (0.05,),
+			'source' : self._getInputReferenceParam('trees')
 		}
-		if self.appOwner is not None:
-			allSources = self.appOwner.GetProducers('trees')
-			dct['source'] = (ReferenceHolder(allSources[0]), ReferenceHolder, [ReferenceHolder(s) for s in allSources])
 		return ParametersDescr(dct)
 
 	def GetInputs(self):
 		return ['trees']
 
 	def Analyze(self, results):
+		self.results = Results(self)
 		if not results.HasAttr('trees'):
-			return Results(self)
+			return self.results
+
+		self.maxTimes = {}
+		self.results.addResults(results)
+		res = self.results
 		for ownedTrees in results.GetOwnedAttr('trees'):
-			with ownedTrees.GetValue() as trees:
-				res = Results(self)
+			with ownedTrees:
+				trees = ownedTrees.GetValue()
+				mtKey = id(ownedTrees.owner)
+
 				ageFunc = lambda t: (lambda n: (t.seed_node.edge.length if t.seed_node.edge.length is not None else 0) + n.root_distance)
 
-				if self.treeId < len(trees):
-					t = trees[self.treeId]
+				res.rawRate = {name:[] for name in RateNames}
+				self.maxTimes[mtKey] = []
+				for i, t in enumerate(trees):
 					t.calc_node_root_distances()
 					t.calc_node_ages(set_node_age_fn = ageFunc(t))
-					self.selectedMaxTime = max(nd.age for nd in t)
-				else:
-					self.selectedMaxTime = 1
-
-				res.rawRate = {name:[] for name in RateNames}
-				for i, t in enumerate(self.trees):
-					t.calc_node_root_distances()
-					t.calc_node_ages(set_node_age_fn = ageFunc)
+					self.maxTimes[mtKey].append(max(nd.age for nd in t))
 					self._fillRawRateData(t.seed_node, res)
 
-				self.addResultsToSelf(res)
-				res.selectedTree = self.treeId
-				return res
-				# TODO
+		res.selectedTree = self.treeId
+		return res
 
 #		self.addResultsToSelf(results)
 #		if not hasattr(self, 'trees'):
@@ -142,7 +136,7 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 		# TODO Find some way to auto-compute epsilon
 		epsilon = 0.00001
 		stTotTime = max(nd.age for nd in node.leaf_nodes())
-		sigs = Results()
+		sigs = TmpObject()
 		sigs.time = []
 		sigs.rate = []
 		sigs.nbLin = []
@@ -164,7 +158,7 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 
 	# Integral of kernel should be equal to 1
 	def _computeSmoothedRate(self, signal, kernelFunc, maxTime, nbSteps = 100):
-		res = Results()
+		res = TmpObject()
 		res.time = np.linspace(0, maxTime, num = nbSteps)
 
 		# Compute partial kernel integral for border effect correction
@@ -182,13 +176,33 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 			res.rate.append(tmp / kernInteg[j])
 		return res
 
+	def _updateTrees(self):
+		ownedTrees = self.results.GetOwnedAttr('trees', lambda oah: oah.owner == self.source.value)
+		if len(ownedTrees) > 0:
+			self.trees = ownedTrees[0].GetValue()
+			mtKey = id(ownedTrees[0].owner)
+			if mtKey in self.maxTimes and self.treeId < len(self.trees):
+				self.selectedMaxTime = self.maxTimes[mtKey][self.treeId]
+
+			rawRates = self.results.GetOwnedAttr('rawRate', lambda oah: ownedTrees[0] in oah.sources)
+			if len(rawRates) > 0:
+				self.selectedRawRate = rawRates[0].GetValue()
+			else:
+				self.selectedRawRate = None
+		else:
+			self.trees = None
+			self.selectedMaxTime = 1
+			self.selectedRawRate = None
+
 	def _getInnerLayout(self):
-		if hasattr(self, 'trees') and self.treeId < len(self.trees):
+		self._updateTrees()
+		if self.trees is not None and self.treeId < len(self.trees):
 			figTree = self._getTreeFigure()
 			figAvgRate = self._getAvgRateFigure()
 		else:
 			figTree = {}
 			figAvgRate = {}
+
 		graphTree = dcc.Graph(
 			style={'width':'100%'},
 			id=self._getElemId('innerLayout', 'treeGraph'), 
@@ -198,9 +212,25 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 			id=self._getElemId('innerLayout', 'avgRateGraph'), 
 			figure=figAvgRate)
 		return html.Div([graphTree, graphAvgRate])
+#		if hasattr(self, 'trees') and self.treeId < len(self.trees):
+#			figTree = self._getTreeFigure()
+#			figAvgRate = self._getAvgRateFigure()
+#		else:
+#			figTree = {}
+#			figAvgRate = {}
+#		graphTree = dcc.Graph(
+#			style={'width':'100%'},
+#			id=self._getElemId('innerLayout', 'treeGraph'), 
+#			figure=figTree)
+#		graphAvgRate = dcc.Graph(
+#			style={'width':'100%'},
+#			id=self._getElemId('innerLayout', 'avgRateGraph'), 
+#			figure=figAvgRate)
+#		return html.Div([graphTree, graphAvgRate])
 
 	def _getTreeFigure(self, cladeInd = None):
-		if not hasattr(self, 'trees'):
+		self._updateTrees()
+		if self.trees is None:
 			return {}
 		else:
 			treeFig = PlotTreeInNewFig(self.trees[self.treeId], self.rateToDisplay, selectCladeInd = cladeInd)
@@ -208,17 +238,18 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 			return treeFig
 	
 	def _getAvgRateFigure(self, selectedClade = None):
-		if not hasattr(self, 'trees'):
+		self._updateTrees()
+		if self.trees is None or self.selectedRawRate is None:
 			return {}
 		else:
 			sigma = self.selectedMaxTime * self.filterWidth
 			kernel = lambda d: np.exp(-0.5*(d/sigma)**2)/(sigma*(2*np.pi)**0.5)
 			for name in RateNames:
-				self.smoothedRate[name][self.treeId] = self._computeSmoothedRate(self.rawRate[name][self.treeId], kernel, self.selectedMaxTime)
+				self.smoothedRate[name][self.treeId] = self._computeSmoothedRate(self.selectedRawRate[name][self.treeId], kernel, self.selectedMaxTime)
 
 			allTraces = []
 			if selectedClade is not None:
-				res = Results()
+				res = TmpObject()
 				res.rawRate = {name:[] for name in RateNames}
 				self._fillRawRateData(self.trees[self.treeId].nodes()[selectedClade], res)
 				smoothedCladeBirth = self._computeSmoothedRate(res.rawRate['birth'][0], kernel, self.selectedMaxTime)
@@ -228,12 +259,12 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 				allTraces.append(go.Scatter(x = smoothedCladeDeath.time, y=smoothedCladeDeath.rate, 
 					mode='lines', line=dict(color='red', dash='dash'), name='clade death rate'))
 
-			allTraces.append(go.Scatter(x = self.rawRate['birth'][self.treeId].time, y=[0]*len(self.rawRate['birth'][self.treeId].rate), 
+			allTraces.append(go.Scatter(x = self.selectedRawRate['birth'][self.treeId].time, y=[0]*len(self.selectedRawRate['birth'][self.treeId].rate), 
 				mode='markers', marker=dict(color='green'), hoverinfo='none', showlegend=False))
 			allTraces.append(go.Scatter(x = self.smoothedRate['birth'][self.treeId].time, y=self.smoothedRate['birth'][self.treeId].rate, 
 				mode='lines', line=dict(color='green'), name='birth rate'))
 
-			allTraces.append(go.Scatter(x = self.rawRate['death'][self.treeId].time, y=[0]*len(self.rawRate['death'][self.treeId].rate), 
+			allTraces.append(go.Scatter(x = self.selectedRawRate['death'][self.treeId].time, y=[0]*len(self.selectedRawRate['death'][self.treeId].rate), 
 				mode='markers', marker=dict(color='red'), hoverinfo='none', showlegend=False))
 			allTraces.append(go.Scatter(x = self.smoothedRate['death'][self.treeId].time, y=self.smoothedRate['death'][self.treeId].rate, 
 				mode='lines', line=dict(color='red'), name='death rate'))
@@ -245,11 +276,7 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 	def _getTreeGraphCallback(self):
 		def PlotTree(treeId, clickData):
 			ind = None if clickData is None else clickData['points'][0]['pointIndex']
-			if hasattr(self, 'trees') and self.treeId < len(self.trees):
-				self.selectedMaxTime = max(nd.age for nd in self.trees[self.treeId])
-				return self._getTreeFigure(ind)
-			else:
-				return {}
+			return self._getTreeFigure(ind)
 		return PlotTree
 
 	def _getCladeSelectionCallback(self):

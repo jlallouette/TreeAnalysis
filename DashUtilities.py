@@ -248,7 +248,13 @@ class DashInterfacable(Interfacable):
 				# Make a dropdown in case several authorized values are available
 				if authVals is not None:
 					if (cls in defaultTypes and currVal not in authVals) or (cls not in defaultTypes and currVal.__class__ not in authVals):
-						raise ValueError('{} is not part of the authorized values: {}'.format(currVal, authVals))
+						if isinstance(currVal, ReferenceHolder) and currVal.value is None:
+							# Special case of reference holder
+							currVal = authVals[0]
+							setattr(self, name, currVal)
+						else:
+							# Otherwise
+							raise ValueError('{} is not part of the authorized values: {}'.format(currVal, authVals))
 					params.append(
 						html.Div([
 						html.Label(name),

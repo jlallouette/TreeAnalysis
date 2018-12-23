@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import copy
 
 # Parameter wrapper
 class Parameters:
@@ -129,6 +130,28 @@ class Interfacable(NamedObject):
 	def GetLayout(self, hideParams = False, hideUsage = False):
 		pass
 
+# Parametrizable class that is linked to an app
+class AppParameterizable(Parameterizable):
+	def __init__(self):
+		self.appOwner = None
+		Parameterizable.__init__(self)
+
+	# Sets the subclass of GenericApp that owns it
+	def setAppOwner(self, appOwner):
+		self.appOwner = appOwner
+		
+	# Get the param description corresponding to name
+	def _getInputReferenceParam(self, name):
+		if hasattr(self, 'appOwner') and self.appOwner is not None:
+			allSources = self.appOwner.GetProducers(name)
+			return (ReferenceHolder(allSources[0]), ReferenceHolder, [ReferenceHolder(s) for s in allSources])
+		else:
+			return (ReferenceHolder(None), ReferenceHolder) 
+
+# Utility class
+class TmpObject(object):
+	pass
+
 # Utility class for Results
 class OwnedAttributeHolder:
 	def __init__(self, name, owner, value, sources):
@@ -146,6 +169,15 @@ class OwnedAttributeHolder:
 
 	def __exit__(self, exc_type, exc_value, traceback):
 		Results.usedSources.remove(self)
+
+	def HasSameSourcesAs(self, other):
+		#if self.name == 'rawRate':
+		#	if isinstance(other, OwnedAttributeHolder):
+		#		print('Comparing sources oah', self.sources, other.sources, set(self.sources) == set(other.sources))
+		#	else:
+		#		print('Comparing sources lst', self.sources, other, set(self.sources) == set(other))
+			
+		return set(self.sources) == set(other.sources if isinstance(other, OwnedAttributeHolder) else other)
 
 # Wraps results from a simulation
 class Results(object):
@@ -173,17 +205,23 @@ class Results(object):
 	def addResults(self, other):
 		for name, lst in other.attributes.items():
 			if name in self.attributes:
-				self.attributes[name] += lst
+				for oah in lst:
+					querry = self.GetOwnedAttr(name, lambda o: o.HasSameSourcesAs(oah) and o.owner == oah.owner)
+					if len(querry) > 0:
+						for q in querry:
+							q.value = oah.value
+					else:
+						self.attributes[name].append(oah)
 			else:
 				self.attributes[name] = lst
 
 	# Sets a new attribute or update an already existing attribute from the same owner
 	def __setattr__(self, name, value):
-		ah = OwnedAttributeHolder(name, self.owner, value, Results.usedSources)
+		ah = OwnedAttributeHolder(name, self.owner, value, copy.copy(Results.usedSources))
 		if name in self.attributes:
 			modif = False
 			for h in self.attributes[name]:
-				if h.owner == self.owner:
+				if h.owner == self.owner and h.HasSameSourcesAs(ah):
 					h.value = value
 					modif = True
 					break
@@ -192,10 +230,10 @@ class Results(object):
 		else:
 			self.attributes[name] = [ah]
 
-	# Returns the attribute corresponding to the owner
+	# Returns the attribute corresponding to the owner and the current sources
 	def __getattr__(self, name):
 		for h in self.attributes[name]:
-			if h.owner == self.owner:
+			if h.owner == self.owner and h.HasSameSourcesAs(Results.usedSources):
 				return h.value
 		raise Exception('Cannot directly access an attribute that is not owned by the Results object.')
 		
@@ -203,9 +241,17 @@ class Results(object):
 		if name in self.attributes:
 			return [oah for oah in self.attributes[name] if filterFunc(oah)]
 		else:
-			raise KeyError('{} does not exist in Results object {}.'.format(name, self))
+			return []
 
-	def HasAttr(self, name):
+	def HasAttr(self, name, filterFunc = lambda x:True):
+		if not name in self.attributes:
+			return False
+		else:
+			for oah in self.attributes[name]:
+				if filterFunc(oah):
+					return True
+			return False
+			
 		return name in self.attributes
 
 # Holds a reference, useful when a Parameterizable object has a parameter that can link 

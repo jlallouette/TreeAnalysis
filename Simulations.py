@@ -15,8 +15,11 @@ class TreeStatSimulation(SimulationRunner, DashInterfacable):
 			'treeGenerator' : (NeutralTreeGenerator(), TreeGenerator)
 		})
 
+	def GetOutputs(self):
+		return ['trees']
+
 	def Simulate(self):
-		res = Results()
+		res = Results(self)
 		res.trees = []
 		for i in range(self.nb_tree):
 			t = None
@@ -38,6 +41,9 @@ class TreeLoaderSim(SimulationRunner, DashInterfacable):
 		return ParametersDescr({
 			'path' : ('data/apes.nwk', str)
 		})
+
+	def GetOutputs(self):
+		return ['trees']
 
 	def Simulate(self):
 		res = Results()

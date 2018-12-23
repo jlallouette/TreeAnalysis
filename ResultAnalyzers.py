@@ -2,10 +2,12 @@ from Utilities import *
 from Simulations import *
 
 # Result analyzer ABC
-class ResultAnalyzer(Parameterizable):
+class ResultAnalyzer(Parameterizable, InputOutput):
 	def __init__(self):
 		Parameterizable.__init__(self)
+		InputOutput.__init__(self)
 		self._toUpdateOnModif = []
+		self.appOwner = None
 
 	# Returns a new result object containing newly computed values
 	@abstractmethod
@@ -17,9 +19,9 @@ class ResultAnalyzer(Parameterizable):
 		return []
 
 	# Convenience function to access results as if they were members of the analyzer
-	def addResultsToSelf(self, results):
-		for name, val in results.__dict__.items():
-			setattr(self, name, val)
+	#def addResultsToSelf(self, results):
+	#	for name, val in results.__dict__.items():
+	#		setattr(self, name, val)
 
 	# Add a specific result analyzer to update on modification
 	def AddToUpdateOnModif(self, ra):
@@ -45,6 +47,11 @@ class ResultAnalyzer(Parameterizable):
 	def _update(self, source):
 		pass
 
+	# Sets the subclass of GenericApp that owns it
+	def setAppOwner(self, appOwner):
+		self.appOwner = appOwner
+		
+
 # TMP TODO Maybe move to another file?
 import dendropy
 import plotly.graph_objs as go
@@ -66,37 +73,70 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 		self.smoothedRate = {name:{} for name in RateNames}
 
 	def GetDefaultParams(self):
-		return ParametersDescr({
+		dct = {
 			'treeId' : (0, int),
 			'rateToDisplay': ('birth', str, ['birth', 'death']),
 			'filterWidth': (0.05,),
-		})
+		}
+		if self.appOwner is not None:
+			allSources = self.appOwner.GetProducers('trees')
+			dct['source'] = (ReferenceHolder(allSources[0]), ReferenceHolder, [ReferenceHolder(s) for s in allSources])
+		return ParametersDescr(dct)
+
+	def GetInputs(self):
+		return ['trees']
 
 	def Analyze(self, results):
-		self.addResultsToSelf(results)
-		if not hasattr(self, 'trees'):
-			return Results()
-		else:
-			res = Results()
-			ageFunc = lambda n: (t.seed_node.edge.length if t.seed_node.edge.length is not None else 0) + n.root_distance
+		if not results.HasAttr('trees'):
+			return Results(self)
+		for ownedTrees in results.GetOwnedAttr('trees'):
+			with ownedTrees.GetValue() as trees:
+				res = Results(self)
+				ageFunc = lambda t: (lambda n: (t.seed_node.edge.length if t.seed_node.edge.length is not None else 0) + n.root_distance)
 
-			if self.treeId < len(self.trees):
-				t = self.trees[self.treeId]
-				t.calc_node_root_distances()
-				t.calc_node_ages(set_node_age_fn = ageFunc)
-				self.selectedMaxTime = max(nd.age for nd in t)
-			else:
-				self.selectedMaxTime = 1
+				if self.treeId < len(trees):
+					t = trees[self.treeId]
+					t.calc_node_root_distances()
+					t.calc_node_ages(set_node_age_fn = ageFunc(t))
+					self.selectedMaxTime = max(nd.age for nd in t)
+				else:
+					self.selectedMaxTime = 1
 
-			res.rawRate = {name:[] for name in RateNames}
-			for i, t in enumerate(self.trees):
-				t.calc_node_root_distances()
-				t.calc_node_ages(set_node_age_fn = ageFunc)
-				self._fillRawRateData(t.seed_node, res)
+				res.rawRate = {name:[] for name in RateNames}
+				for i, t in enumerate(self.trees):
+					t.calc_node_root_distances()
+					t.calc_node_ages(set_node_age_fn = ageFunc)
+					self._fillRawRateData(t.seed_node, res)
 
-			self.addResultsToSelf(res)
-			res.selectedTree = self.treeId
-			return res
+				self.addResultsToSelf(res)
+				res.selectedTree = self.treeId
+				return res
+				# TODO
+
+#		self.addResultsToSelf(results)
+#		if not hasattr(self, 'trees'):
+#			return Results()
+#		else:
+#			res = Results()
+#			ageFunc = lambda n: (t.seed_node.edge.length if t.seed_node.edge.length is not None else 0) + n.root_distance
+#
+#			if self.treeId < len(self.trees):
+#				t = self.trees[self.treeId]
+#				t.calc_node_root_distances()
+#				t.calc_node_ages(set_node_age_fn = ageFunc)
+#				self.selectedMaxTime = max(nd.age for nd in t)
+#			else:
+#				self.selectedMaxTime = 1
+#
+#			res.rawRate = {name:[] for name in RateNames}
+#			for i, t in enumerate(self.trees):
+#				t.calc_node_root_distances()
+#				t.calc_node_ages(set_node_age_fn = ageFunc)
+#				self._fillRawRateData(t.seed_node, res)
+#
+#			self.addResultsToSelf(res)
+#			res.selectedTree = self.treeId
+#			return res
 
 	def _fillRawRateData(self, node, res):
 		# TODO Find some way to auto-compute epsilon
@@ -242,6 +282,12 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 
 	def DependsOn(self):
 		return [TreeStatSimulation]
+
+	def GetInputs(self):
+		return ['trees']
+
+	def GetOutputs(self):
+		return ['colless_tree_imba', 'sackin_index']
 	
 	def Analyze(self, results):
 		self.addResultsToSelf(results)

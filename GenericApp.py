@@ -18,12 +18,14 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 
 	@Usable.Clickable('special', 'innerLayout', 'children')
 	def Analyze(self):
-		res = Results()
+		res = Results(self)
 		for sim in self.simulations:
-			res += self.simManager.GetSimulationResult(sim, self.memoize)
+			#res += self.simManager.GetSimulationResult(sim, self.memoize)
+			res.addResults(self.simManager.GetSimulationResult(sim, self.memoize))
 
 		for analyzer in self.analyzers:
-			res += analyzer.Analyze(res)
+			#res += analyzer.Analyze(res)
+			res.addResults(analyzer.Analyze(res))
 
 		return self._getInnerLayout()
 	
@@ -74,5 +76,12 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 			else:
 				raise ValueError('Dependencies can only be of classResultAnalyzer or SimulationRunner, received class {}'.format(dep.__name__))
 		self.analyzers.append(analyzer)
+		analyzer.setAppOwner(self)
+
+	def GetProducers(self, name):
+		return [e for e in self.simulations + self.analyzers if name in e.GetOutputs()]
+
+	def GetConsumers(self, name):
+		return [e for e in self.simulations + self.analyzers  if name in e.GetInputs()]
 
 	

@@ -6,12 +6,6 @@ import random
 
 from Utilities import *
 
-# Interfacable abstract base class
-class Interfacable(ABC):
-	@abstractmethod
-	def GetLayout(self, hideParams = False, hideUsage = False):
-		pass
-
 def getDCCElemForType(elemId, name, cls, val):
 	elem = None
 	elemIdsFieldNames = []
@@ -71,6 +65,8 @@ class DashDropDownData:
 # Interfacable elements for Dash
 class DashInterfacable(Interfacable):
 	def __init__(self):
+		Interfacable.__init__(self)
+
 		self.subAuthValsObj = {}
 		self._fullDivId = self._getElemId('special', 'all')
 		self._uselessDivIds = {name:self._getElemId('special', 'uselessDiv'+name) for name in ['use', 'all', 'anyParamChange']}
@@ -121,7 +117,12 @@ class DashInterfacable(Interfacable):
 						setattr(dfd.obj, dfd.attrName, self.subAuthValsObj[savk])
 					else:
 						cls = type(oldVal)
-						setattr(dfd.obj, dfd.attrName, cls(v))
+						try:
+							# First try to build it from cls and value
+							setattr(dfd.obj, dfd.attrName, cls(v))
+						except:
+							# Otherwise, try by interpreting it
+							setattr(dfd.obj, dfd.attrName, eval(v))
 				else:
 					oldVal = getattr(dfd.obj, dfd.attrName)
 					if type(oldVal) == tuple:
@@ -222,7 +223,7 @@ class DashInterfacable(Interfacable):
 		print('getting Layout for {}'.format(self))
 		params = []
 		uses = []
-		defaultTypes = [str, int, bool, float, tuple, range]
+		defaultTypes = [str, int, bool, float, tuple, range, ReferenceHolder]
 
 		# First display self parameters
 		if isinstance(self, Parameterizable):
@@ -255,7 +256,7 @@ class DashInterfacable(Interfacable):
 							id = elemId,
 							options=[{'label': self._getDropDownValName(av, cls, defaultTypes),
 									'value': self._getDropDownValName(av, cls, defaultTypes)} for av in authVals], 
-							value=currVal if cls in defaultTypes else currVal.__class__.__name__,
+							value=self._getDropDownValName(currVal, cls, defaultTypes) if cls in defaultTypes else currVal.__class__.__name__,
 							clearable=False
 						)]))
 					if self._fillFieldData:
@@ -313,7 +314,7 @@ class DashInterfacable(Interfacable):
 		titleStyle = {'display':'none' if hideTitle else 'inline-block'}
 		uselessStyle = {'display':'none'}
 
-		titleDiv = html.Div(html.H5(self.__class__.__name__), style=titleStyle)
+		titleDiv = html.Div(html.H5(self.GetUniqueName()), style=titleStyle)
 
 		uselessDivs = [html.Div(id=idv, style=uselessStyle, children='') for nm, idv in self._uselessDivIds.items()]
 

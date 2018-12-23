@@ -5,7 +5,7 @@ from Utilities import *
 class SimulationManager:
 	def __init__(self, fname = 'Simulations.pkl'):
 		self.fname = fname
-		if os.path.exists(fname):
+		if os.path.isfile(fname):
 			with open(fname, 'rb') as f:
 				self.simulations = pickle.load(f)
 		else:
@@ -32,11 +32,20 @@ class SimulationManager:
 		else:
 			return simRunner.Simulate()
 
+# ABC for SimulationRunner and ResultAnalyzer
+class InputOutput:
+	def GetInputs(self):
+		return []
+	
+	def GetOutputs(self):
+		return []
+
 # Interface for simulation runner classes
-class SimulationRunner(Parameterizable, Usable):
+class SimulationRunner(Parameterizable, Usable, InputOutput):
 	def __init__(self):
 		Parameterizable.__init__(self)
 		Usable.__init__(self)
+		InputOutput.__init__(self)
 
 	# returns a result object
 	@abstractmethod

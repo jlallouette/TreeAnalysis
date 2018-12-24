@@ -30,7 +30,6 @@ class NodePlotter:
 		self.left = 0
 		self.brLeft = 0
 		self.brRight = 0
-		self.splitWidth = 2
 
 		self.edge = EdgePlotCls(self.node.edge, self, self.parent, rateToDisplay = rateToDisplay)
 		self.rateToDisplay = rateToDisplay
@@ -70,9 +69,21 @@ class NodePlotter:
 		for c in self.children:
 			res += c.GetAllNodes()
 		return res
+	
+	def GetNodeFromInd(self, ind):
+		for nd in self.GetAllNodes():
+			if nd.node.cladeInd == ind:
+				return nd
+		return None
 
 	def GetColor(self):
 		return 'rgb(0,0,0)'
+
+	def _getCladeBoxLineColor(self):
+		return 'rgb(128, 128, 128)'
+
+	def _getCladeBoxFillColor(self):
+		return 'rgb(240, 240, 240)'
 
 	def IsInClade(self, cladeInd):
 		tmp = self
@@ -98,11 +109,24 @@ class NodePlotter:
 			name='allNodes'
 		)
 
+		# Clade selection rectangle
+		cladeRects = []
+		if selectCladeInd is not None:
+			cld = self.GetNodeFromInd(selectCladeInd)
+			tStart = cld.time-cld.edge.length / 2
+			tEnd = max(allX)
+			cladeRects.append(dict(
+				type='rect', x0=tStart, y0=cld.left, x1=tEnd, y1=cld.left+cld.width, 
+				line=dict(color=self._getCladeBoxLineColor(), width=2), 
+				fillcolor=self._getCladeBoxFillColor(),
+				layer='below')
+			)
+
 		allEdges = []
 		for edge in self.GetAllAttr('edge'):
 			allEdges += edge.GetPlotElem(self.minRate, self.maxRate, selectCladeInd)
 
-		layout = dict(shapes = allEdges, xaxis=dict(showgrid=False, title=dict(text='Time'), range = (0, max(allX)*1.01), ticklen=5, tickwidth=1), yaxis=dict(showgrid=False, showticklabels=False, range=(0, max(allY)+leafWidth/2), autorange=False), hovermode='closest')
+		layout = dict(shapes = cladeRects + allEdges, xaxis=dict(showgrid=False, title=dict(text='Time'), range = (0, max(allX)*1.01), ticklen=5, tickwidth=1), yaxis=dict(showgrid=False, showticklabels=False, range=(0, max(allY)+leafWidth/2), autorange=False), hovermode='closest')
 		return [nodes], layout
 
 class EdgePlotter:

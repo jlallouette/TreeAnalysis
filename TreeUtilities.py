@@ -49,7 +49,7 @@ class NodePlotter:
 	def ComputePos(self, left = 0):
 		self.left = left
 		if len(self.children) > 0:
-			for c in self.children:
+			for c in sorted(self.children, key=lambda c: c.width):
 				c.ComputePos(left)
 				left += c.width
 			self.brLeft = self.children[0].xpos

@@ -226,6 +226,13 @@ class Results(object):
 			else:
 				self.attributes[name] = lst
 
+	def ReOwn(self, newOner):
+		object.__setattr__(self, 'owner', newOner)
+		for name, lst in self.attributes.items():
+			for oah in lst:
+				oah.owner = newOner
+				oah.sources = []
+
 	# Sets a new attribute or update an already existing attribute from the same owner
 	def __setattr__(self, name, value):
 		ah = OwnedAttributeHolder(name, self.owner, value, copy.copy(Results.usedSources))
@@ -243,9 +250,12 @@ class Results(object):
 
 	# Returns the attribute corresponding to the owner and the current sources
 	def __getattr__(self, name):
-		for h in self.attributes[name]:
-			if h.owner == self.owner and h.HasSameSourcesAs(Results.usedSources):
-				return h.value
+		if name.startswith('__'):
+			return object.__getattr__(self, name)
+		else:
+			for h in self.attributes[name]:
+				if h.owner == self.owner and h.HasSameSourcesAs(Results.usedSources):
+					return h.value
 		raise Exception('Cannot directly access an attribute that is not owned by the Results object.')
 		
 	def GetOwnedAttr(self, name, filterFunc = lambda x:True, ind = None, defVal = None):

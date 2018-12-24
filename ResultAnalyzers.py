@@ -230,12 +230,16 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 	def _getTreeGraphCallback(self):
 		def PlotTree(treeId, clickData):
 			ind = None if clickData is None else clickData['points'][0]['pointIndex']
+			if ind == 0:
+				ind = None
 			return self._getTreeFigure(ind)
 		return PlotTree
 
 	def _getCladeSelectionCallback(self):
 		def CladeSelect(hoverData, treeFig):
-			ind = 0 if hoverData is None else hoverData['points'][0]['pointIndex']
+			ind = None if hoverData is None else hoverData['points'][0]['pointIndex']
+			if ind == 0:
+				ind = None
 			return self._getAvgRateFigure(ind)
 		return CladeSelect
 

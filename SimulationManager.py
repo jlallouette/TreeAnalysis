@@ -1,6 +1,7 @@
-import pickle
+import dill as pickle
 import os
 from Utilities import *
+import copy
 
 class SimulationManager:
 	def __init__(self, fname = 'Simulations.pkl'):
@@ -27,8 +28,13 @@ class SimulationManager:
 			if kt not in self.simulations:
 				print('Running simulation')
 				self.simulations[kt] = simRunner.Simulate()
+				res = self.simulations[kt]
+			else:
+				res = copy.deepcopy(self.simulations[kt])
+				# Re-owns the simulation
+				res.ReOwn(simRunner)
 			self.SaveSimulations()
-			return self.simulations[kt]
+			return res
 		else:
 			return simRunner.Simulate()
 

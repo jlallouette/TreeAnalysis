@@ -221,10 +221,10 @@ class ExtendedExplRadRateFunc(NonNeutralRateFunction):
 
 	def GetDefaultParams(self):
 		return ParametersDescr({
-			'endDelay' : (0.1,),
-			'nbSteps' : (4, int),
+			'endDelay' : (1.5,),
+			'nbSteps' : (10, int),
 			'basalRate' : (1.0,),
-			'lowRate' : (0.01,)
+			'lowRate' : (0.4,)
 		})
 
 	def getRate(self, node, time, **kwargs):

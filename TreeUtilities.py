@@ -6,7 +6,6 @@ import sys
 sys.setrecursionlimit(10000)
 
 leafWidth = 1
-#birthRateColorScale = [[0, 'rgb(0, 0, 255)'],[0.5, 'rgb(127, 127, 127)'],[1, 'rgb(255, 0, 0)']]
 birthRateColorScale = [[0, 'rgb(0,0,131)'], [0.125, 'rgb(0,60,170)'],
 	[0.375, 'rgb(5,255,255)'], [0.625, 'rgb(255,255,0)'],
 	[0.875, 'rgb(250,0,0)'], [1, 'rgb(128,0,0)']

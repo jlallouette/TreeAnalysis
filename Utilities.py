@@ -171,13 +171,24 @@ class OwnedAttributeHolder:
 		Results.usedSources.remove(self)
 
 	def HasSameSourcesAs(self, other):
-		#if self.name == 'rawRate':
-		#	if isinstance(other, OwnedAttributeHolder):
-		#		print('Comparing sources oah', self.sources, other.sources, set(self.sources) == set(other.sources))
-		#	else:
-		#		print('Comparing sources lst', self.sources, other, set(self.sources) == set(other))
-			
 		return set(self.sources) == set(other.sources if isinstance(other, OwnedAttributeHolder) else other)
+	
+	def GetAllSources(self):
+		res = [self.owner]
+		for s in self.sources:
+			res += s.GetAllSources()
+		return res
+	
+	def GetFullSourceName(self, layersToPeel = 0, onlyFinalSources = False):
+		if onlyFinalSources:
+			if len(self.sources) > 0:
+				return ', '.join(s.GetFullSourceName(onlyFinalSources = True) for s in self.sources)
+			else:
+				return self.owner.GetUniqueName()
+		elif layersToPeel > 0:
+			return ', '.join(s.GetFullSourceName(layersToPeel = layersToPeel - 1) for s in self.sources)
+		else:
+			return '{}({})'.format(self.owner.GetUniqueName(), ', '.join(s.GetFullSourceName() for s in self.sources))
 
 # Wraps results from a simulation
 class Results(object):
@@ -237,11 +248,17 @@ class Results(object):
 				return h.value
 		raise Exception('Cannot directly access an attribute that is not owned by the Results object.')
 		
-	def GetOwnedAttr(self, name, filterFunc = lambda x:True):
+	def GetOwnedAttr(self, name, filterFunc = lambda x:True, ind = None, defVal = None):
 		if name in self.attributes:
-			return [oah for oah in self.attributes[name] if filterFunc(oah)]
+			res = [oah for oah in self.attributes[name] if filterFunc(oah)]
+			if ind is None:
+				return res
+			elif ind < len(res):
+				return res[ind].GetValue()
+			else:
+				return defVal
 		else:
-			return []
+			return [] if ind is None else defVal
 
 	def HasAttr(self, name, filterFunc = lambda x:True):
 		if not name in self.attributes:

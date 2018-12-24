@@ -5,12 +5,10 @@ from GenericApp import *
 class TreeStatsApp(GenericApp):
 	def __init__(self):
 		GenericApp.__init__(self)
-		#self.AddSimulation(TreeLoaderSim())
-		#self.AddAnalyzer(TreeVisualizer())
-		#self.AddAnalyzer(TreeStatAnalyzer())
 		self.AddSimulation(TreeStatSimulation())
 		self.AddSimulation(TreeStatSimulation())
 		self.AddAnalyzer(TreeVisualizer())
+		self.AddAnalyzer(TreeStatAnalyzer())
 
 app = dash.Dash(__name__)
 

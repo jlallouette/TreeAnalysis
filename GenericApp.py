@@ -20,11 +20,9 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 	def Analyze(self):
 		res = Results(self)
 		for sim in self.simulations:
-			#res += self.simManager.GetSimulationResult(sim, self.memoize)
 			res.addResults(self.simManager.GetSimulationResult(sim, self.memoize))
 
 		for analyzer in self.analyzers:
-			#res += analyzer.Analyze(res)
 			res.addResults(analyzer.Analyze(res))
 
 		return self._getInnerLayout()
@@ -64,7 +62,9 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 		deps = analyzer.DependsOn()
 		for dep in deps:
 			if SimulationRunner in dep.mro():
-				self.simulations.append(dep())
+				# If it is not already added
+				if not any(isinstance(sim, dep) for sim in self.simulations):
+					self.simulations.append(dep())
 			elif ResultAnalyzer in dep.mro():
 				isThere = False
 				for ra in self.analyzers:

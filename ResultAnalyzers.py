@@ -18,11 +18,6 @@ class ResultAnalyzer(AppParameterizable, InputOutput):
 	def DependsOn(self):
 		return []
 
-	# Convenience function to access results as if they were members of the analyzer
-	#def addResultsToSelf(self, results):
-	#	for name, val in results.__dict__.items():
-	#		setattr(self, name, val)
-
 	# Add a specific result analyzer to update on modification
 	def AddToUpdateOnModif(self, ra):
 		self._toUpdateOnModif.append(ra)
@@ -55,8 +50,6 @@ import dash_core_components as dcc
 from TreeUtilities import *
 import numpy as np
 import copy
-# TODO TMP
-import json
 
 RateNames = ['birth', 'death']
 
@@ -105,32 +98,8 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 					self._fillRawRateData(t.seed_node, res)
 
 		res.selectedTree = self.treeId
+		res.selectedSource = self.source
 		return res
-
-#		self.addResultsToSelf(results)
-#		if not hasattr(self, 'trees'):
-#			return Results()
-#		else:
-#			res = Results()
-#			ageFunc = lambda n: (t.seed_node.edge.length if t.seed_node.edge.length is not None else 0) + n.root_distance
-#
-#			if self.treeId < len(self.trees):
-#				t = self.trees[self.treeId]
-#				t.calc_node_root_distances()
-#				t.calc_node_ages(set_node_age_fn = ageFunc)
-#				self.selectedMaxTime = max(nd.age for nd in t)
-#			else:
-#				self.selectedMaxTime = 1
-#
-#			res.rawRate = {name:[] for name in RateNames}
-#			for i, t in enumerate(self.trees):
-#				t.calc_node_root_distances()
-#				t.calc_node_ages(set_node_age_fn = ageFunc)
-#				self._fillRawRateData(t.seed_node, res)
-#
-#			self.addResultsToSelf(res)
-#			res.selectedTree = self.treeId
-#			return res
 
 	def _fillRawRateData(self, node, res):
 		# TODO Find some way to auto-compute epsilon
@@ -212,21 +181,6 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 			id=self._getElemId('innerLayout', 'avgRateGraph'), 
 			figure=figAvgRate)
 		return html.Div([graphTree, graphAvgRate])
-#		if hasattr(self, 'trees') and self.treeId < len(self.trees):
-#			figTree = self._getTreeFigure()
-#			figAvgRate = self._getAvgRateFigure()
-#		else:
-#			figTree = {}
-#			figAvgRate = {}
-#		graphTree = dcc.Graph(
-#			style={'width':'100%'},
-#			id=self._getElemId('innerLayout', 'treeGraph'), 
-#			figure=figTree)
-#		graphAvgRate = dcc.Graph(
-#			style={'width':'100%'},
-#			id=self._getElemId('innerLayout', 'avgRateGraph'), 
-#			figure=figAvgRate)
-#		return html.Div([graphTree, graphAvgRate])
 
 	def _getTreeFigure(self, cladeInd = None):
 		self._updateTrees()
@@ -304,8 +258,8 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 		ResultAnalyzer.__init__(self)
 		DashInterfacable.__init__(self)
 
-		self.colless_tree_imba = []
-		self.sackin_index = []
+		self.selectedTree = None
+		self.selectedSource = None
 
 	def DependsOn(self):
 		return [TreeStatSimulation]
@@ -317,17 +271,21 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 		return ['colless_tree_imba', 'sackin_index']
 	
 	def Analyze(self, results):
-		self.addResultsToSelf(results)
+		self.results = Results(self)
 
-		res = Results()
-		res.colless_tree_imba = []
-		res.sackin_index = []
-		for t in self.trees:
-			res.colless_tree_imba.append(dendropy.calculate.treemeasure.colless_tree_imbalance(t))
-			res.sackin_index.append(dendropy.calculate.treemeasure.sackin_index(t))
+		self.selectedTree = results.GetOwnedAttr('selectedTree', ind=0, defVal=None)
+		self.selectedSource = results.GetOwnedAttr('selectedSource', ind=0, defVal=None)
 
-		self.addResultsToSelf(res)
-		return res
+		for ownedTrees in results.GetOwnedAttr('trees'):
+			with ownedTrees:
+				trees = ownedTrees.GetValue()
+				self.results.colless_tree_imba = []
+				self.results.sackin_index = []
+				for t in trees:
+					self.results.colless_tree_imba.append(dendropy.calculate.treemeasure.colless_tree_imbalance(t))
+					self.results.sackin_index.append(dendropy.calculate.treemeasure.sackin_index(t))
+
+		return self.results
 	
 	def DefaultUpdateOnModif(self):
 		return [TreeVisualizer]
@@ -335,57 +293,52 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 	def _update(self, source):
 		if isinstance(source, TreeVisualizer):
 			self.selectedTree = source.treeId
+			self.selectedSource = source.source
 
 	def _getInnerLayout(self):
+		opacity = 0.75
+
 		sciShapes = []
 		sciHist = []
-		if hasattr(self, 'colless_tree_imba'):
-			sciHist = [go.Histogram(x=self.colless_tree_imba)]
-			if hasattr(self, 'selectedTree'):
-				xVal = self.colless_tree_imba[self.selectedTree]
-				sciShapes = [dict(x0=xVal, x1=xVal, y0=0, y1=1, yref='paper', type='line', line=dict(color='red',width=2))]
+		for ownedSci in self.results.GetOwnedAttr('colless_tree_imba'):
+			with ownedSci:
+				sciHist.append(go.Histogram(x=ownedSci.GetValue(), opacity = opacity, name = ownedSci.GetFullSourceName(layersToPeel=1)))
+				if self.selectedTree is not None and self.selectedSource.value in ownedSci.GetAllSources():
+					xVal = ownedSci.GetValue()[self.selectedTree]
+					sciShapes.append(dict(x0=xVal, x1=xVal, y0=0, y1=1, yref='paper', type='line', line=dict(color='red',width=2)))
+
 		siShapes = []
 		siHist = []
-		if hasattr(self, 'sackin_index'):
-			siHist = [go.Histogram(x=self.sackin_index)]
-			if hasattr(self, 'selectedTree'):
-				xVal = self.sackin_index[self.selectedTree]
-				siShapes = [dict(x0=xVal, x1=xVal, y0=0, y1=1, yref='paper', type='line', line=dict(color='red',width=2))]
+		for ownedSi in self.results.GetOwnedAttr('sackin_index'):
+			with ownedSi:
+				siHist.append(go.Histogram(x=ownedSi.GetValue(), opacity = opacity, name = ownedSi.GetFullSourceName(layersToPeel=1)))
+				if self.selectedTree is not None and self.selectedSource.value in ownedSi.GetAllSources():
+					xVal = ownedSi.GetValue()[self.selectedTree]
+					siShapes.append(dict(x0=xVal, x1=xVal, y0=0, y1=1, yref='paper', type='line', line=dict(color='red',width=2)))
+
 		allHists = [
-			dcc.Graph(figure={
-				'data':sciHist,
-				'layout': go.Layout(
-					xaxis={
-						'title': 'Colless Tree Imbalance',
-						'type': 'linear'
-					},
-					yaxis={
-						'title': 'Count',
-						'type': 'linear'
-					},
-					margin={'l': 40, 'b': 30, 't': 10, 'r': 0},
-					height=450,
-					hovermode='closest',
-					shapes=sciShapes
+			dcc.Graph(figure=dict(
+				data=sciHist, 
+				layout=go.Layout(
+					xaxis=dict(title='Colless Tree Imbalance'), 
+					yaxis=dict(title='Count'), 
+					margin=dict(l=40,b=30,t=10,r=0), 
+					hovermode='closest', 
+					barmode='overlay',
+					shapes=sciShapes)
 				)
-			}),
-			dcc.Graph(figure={
-				'data':siHist,
-				'layout': go.Layout(
-					xaxis={
-						'title': 'Sackin Index',
-						'type': 'linear'
-					},
-					yaxis={
-						'title': 'Count',
-						'type': 'linear'
-					},
-					margin={'l': 40, 'b': 30, 't': 10, 'r': 0},
-					height=450,
-					hovermode='closest',
-					shapes=siShapes
+			),
+			dcc.Graph(figure=dict(
+				data=siHist, 
+				layout=go.Layout(
+					xaxis=dict(title='Sackin Index'), 
+					yaxis=dict(title='Count'), 
+					margin=dict(l=40,b=30,t=10,r=0), 
+					hovermode='closest', 
+					barmode='overlay',
+					shapes=siShapes)
 				)
-			})
+			)
 		]
 		return DashHorizontalLayout().GetLayout(allHists)
 

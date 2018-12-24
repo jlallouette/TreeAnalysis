@@ -25,6 +25,7 @@ class NeutralTreeGenerator(TreeGenerator):
 
 	def generate(self, num_extant_tips):
 		t = treesim.birth_death_tree(birth_rate=self.birth_rate, death_rate=self.death_rate, num_extant_tips=num_extant_tips, is_retain_extinct_tips = True)
+		# TODO What to do about this?
 		# Get last nodes generated (a cherry with branch lenghts = 0) and replace a cherry by one single node
 		#lastleaf=[n for n in t.leaf_nodes() if n.edge_length == 0][0]
 		#parent=lastleaf.parent_node
@@ -121,6 +122,7 @@ class NonNeutralTreeGenerator(TreeGenerator):
 				extant_tips.remove(nd)
 				setattr(nd, 'is_extinct', True)
 
+		# TODO What to do about this?
 		# Get last nodes generated (a cherry with branch lenghts = 0) and replace a cherry by one single node
 		#lastleaf=[n for n in tree.leaf_nodes() if n.edge_length == 0][0]
 		#parent=lastleaf.parent_node

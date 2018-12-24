@@ -187,6 +187,10 @@ class ExplosiveRadiationRateFunc(NonNeutralRateFunction):
 		return self.basalRate
 
 class TraitEvolLinearBrownian(NonNeutralRateFunction):
+	def __init__(self):
+		NonNeutralRateFunction.__init__(self)
+		self.traitValname = 'traitVal' + str(id(self))
+
 	def GetDefaultParams(self):
 		return ParametersDescr({
 			'basalRate' : (1.0,),
@@ -195,14 +199,14 @@ class TraitEvolLinearBrownian(NonNeutralRateFunction):
 		})
 
 	def getRate(self, node, time, **kwargs):
-		if hasattr(node, 'traitVal'):
-			return node.traitVal
+		if hasattr(node, self.traitValname):
+			return getattr(node, self.traitValname)
 		else:
 			if node.parent_node is None:
-				node.traitVal = self.basalRate
+				setattr(node, self.traitValname, self.basalRate)
 			else:
-				node.traitVal = max(self.lowestRate, node.parent_node.traitVal + np.random.normal(0, self.sigma))
-			return node.traitVal
+				setattr(node, self.traitValname, max(self.lowestRate, getattr(node.parent_node, self.traitValname) + np.random.normal(0, self.sigma)))
+			return getattr(node, self.traitValname)
 
 	def getNextChange(self, node, time, **kwargs):
 		return math.inf

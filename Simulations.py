@@ -10,8 +10,10 @@ class TreeStatSimulation(SimulationRunner, DashInterfacable):
 
 	def GetDefaultParams(self):
 		return ParametersDescr({
+			'endCondition' : ('num_extant_tips', str, ['num_extant_tips', 'max_time']),
 			'nb_tree' : (10, int),
-			'tree_size' : (20, int),
+			'max_time' : (20.0, float),
+			'num_extant_tips' : (20, int),
 			'treeGenerator' : (NeutralTreeGenerator(), TreeGenerator)
 		})
 
@@ -23,10 +25,11 @@ class TreeStatSimulation(SimulationRunner, DashInterfacable):
 		res.trees = []
 		for i in range(self.nb_tree):
 			t = None
-			while t is None or len(t.leaf_nodes()) < self.tree_size:
+			while t is None or (self.endCondition == 'num_extant_tips' and len(t.leaf_nodes()) < self.num_extant_tips):
 				if t is not None:
-					print('Rejected tree with {} leaves (need {}).'.format(len(t.leaf_nodes()), self.tree_size))
-				t = self.treeGenerator.generate(self.tree_size)
+					print('Rejected tree with {} leaves (need {}).'.format(len(t.leaf_nodes()), self.num_extant_tips))
+				#t = self.treeGenerator.generate(tree_size = self.tree_size)
+				t = self.treeGenerator.generate(**{self.endCondition:getattr(self, self.endCondition)})
 			res.trees.append(t)
 		return res
 

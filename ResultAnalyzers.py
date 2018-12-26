@@ -286,7 +286,10 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 				self.results.colless_tree_imba = []
 				self.results.sackin_index = []
 				for t in trees:
-					self.results.colless_tree_imba.append(dendropy.calculate.treemeasure.colless_tree_imbalance(t))
+					if len(t.leaf_nodes()) > 3:
+						self.results.colless_tree_imba.append(dendropy.calculate.treemeasure.colless_tree_imbalance(t))
+					else:
+						self.results.colless_tree_imba.append(None)
 					self.results.sackin_index.append(dendropy.calculate.treemeasure.sackin_index(t))
 
 		return self.results

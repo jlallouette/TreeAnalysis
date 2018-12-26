@@ -101,7 +101,6 @@ class NonNeutralTreeGenerator(TreeGenerator):
 						else:
 							n.edge.deathRates.append((total_time + localTime, self.death_rf.getRate(n, n.edge.length+localTime, total_time=total_time+localTime, extant_tips=extant_tips)))
 					
-
 			# add waiting time to nodes
 			for nd in extant_tips:
 				try:
@@ -142,6 +141,15 @@ class NonNeutralTreeGenerator(TreeGenerator):
 				extant_tips.remove(nd)
 				setattr(nd, 'is_extinct', True)
 
+		# Cut to appropriate time if simulation went too far
+		if max_time is not None and total_time > max_time:
+			if isBirth:
+				parent = c1.parent_node
+				parent.remove_child(c1)
+				parent.remove_child(c2)
+			for n in tree.leaf_nodes():
+				n.edge.length -= total_time - max_time
+			
 		# TODO What to do about this?
 		# Get last nodes generated (a cherry with branch lenghts = 0) and replace a cherry by one single node
 		#lastleaf=[n for n in tree.leaf_nodes() if n.edge_length == 0][0]

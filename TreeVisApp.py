@@ -12,6 +12,7 @@ import numpy as np
 
 #TMP
 import json
+from dendropy.calculate import treemeasure
 
 #external_stylesheets = [
 #    "https://unpkg.com/tachyons@4.10.0/css/tachyons.min.css"]
@@ -82,6 +83,17 @@ class TreePlotter(Parameterizable, Usable, DashInterfacable):
 		self._setCustomLayout('all', DashHorizontalLayout(wFunc))
 		self._setCustomLayout('controls', DashVerticalLayout())
 
+
+		# Tree Properties (+ RF distance)
+		self.collessIndex = -1.0
+		self.sackinIndex  = -1.0
+		self.wScore       = -1.0
+		self.cladeSizeDist    = None
+		self.distMRCADist     = None
+		self.w2ScoreDist      = None
+		self.branchLengthDist = None
+		self.measuresDebug    = ""
+
 	def GetDefaultParams(self):
 		return ParametersDescr({
 			'tree_size' : (20, int),
@@ -111,14 +123,46 @@ class TreePlotter(Parameterizable, Usable, DashInterfacable):
 				ax.plot(times, rate)
 			self.rateFig = tls.mpl_to_plotly(fig)
 
+		# Compute tree measures
+		# fig, ax = plt.subplots()
+		# ax.plot(range(1,10), [x**2 for x in range(1,10)])
+		# self.treepropFig = tls.mpl_to_plotly(fig)
+
+		# Sum of differences of numbers of children in left and right subtrees over all internal nodes. 
+		self.collessIndex  = treemeasure.colless_tree_imbalance(self.t, normalize='max')
+		# Sum of the number of ancestors for each tip of the tree. The larger the Sackin’s index, the less balanced the tree. 
+		self.sackinIndex   = treemeasure.sackin_index(self.t, normalize=True)
+		# Clade size distribution
+		cladeSizes = [0]*(len(self.t.leaf_nodes())+1)
+		for n in self.t.nodes():
+			cladeSizes[len(n.leaf_nodes())] += 1
+		fig, ax = plt.subplots()
+		ax.set_title("Clade size distribution")
+		#ax.scatter(range(len(self.t.leaf_nodes())+1), cladeSizes)
+		#ax.hist(cladeSizes, bins=range(len(self.t.leaf_nodes())+1))
+		ax.bar(range(len(self.t.leaf_nodes())+1), cladeSizes)	
+		self.cladeSizeDist = tls.mpl_to_plotly(fig)
+		self.measuresDebug = cladeSizes 
+		# Distance between MRCA and root
+		 nbSetsPerPoint = 10
+
+
+
 	def _getInnerLayout(self):
 		figs = []
 		#if self.rateFig is not None:
 		figs.append(dcc.Graph(id='rateFig', figure=self.rateFig if self.rateFig is not None else {}))
 		#if self.pltFig is not None:
 		figs.append(dcc.Graph(id='treeFig', figure=self.pltFig if self.pltFig is not None else {}))
+
+		# Plot measures
+		figs.append(dcc.Graph(id='cladeSizeFig', figure=self.cladeSizeDist if self.cladeSizeDist is not None else {}))
+		figs.append(html.Div(children="Colless’ tree imbalance or I statistic: " + str(self.collessIndex)))
+		figs.append(html.Div(children="Sackin’s index: " + str(self.sackinIndex)))
+		figs.append(html.Div(children="Debug: " + str(self.measuresDebug)))
+
 		if len(figs) > 0:
-			return DashHorizontalLayout().GetLayout(figs)
+			return DashVerticalLayout().GetLayout(figs)
 		else:
 			return html.Div(children='lol')
 

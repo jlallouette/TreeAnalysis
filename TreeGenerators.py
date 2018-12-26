@@ -13,7 +13,7 @@ class TreeGenerator(Parameterizable, DashInterfacable):
 		DashInterfacable.__init__(self)
 
 	@abstractmethod
-	def generate(self, num_extant_tips):
+	def generate(self, num_extant_tips = None, max_time = None):
 		pass
 
 class NeutralTreeGenerator(TreeGenerator):
@@ -23,12 +23,18 @@ class NeutralTreeGenerator(TreeGenerator):
 			'death_rate' : (0.0,)
 		})
 
-	def generate(self, num_extant_tips):
-		t = treesim.birth_death_tree(birth_rate=self.birth_rate, death_rate=self.death_rate, num_extant_tips=num_extant_tips, is_retain_extinct_tips = True)
+	def generate(self, num_extant_tips = None, max_time = None):
+		if num_extant_tips is not None:
+			t = treesim.birth_death_tree(birth_rate=self.birth_rate, death_rate=self.death_rate, num_extant_tips=num_extant_tips, is_retain_extinct_tips = True)
+		elif max_time is not None:
+			t = treesim.birth_death_tree(birth_rate=self.birth_rate, death_rate=self.death_rate, max_time=max_time, is_retain_extinct_tips = True)
+		else:
+			raise ValueError('At least one ending condition must be specified.')
+		# TODO What to do about this?
 		# Get last nodes generated (a cherry with branch lenghts = 0) and replace a cherry by one single node
-		lastleaf=[n for n in t.leaf_nodes() if n.edge_length == 0][0]
-		parent=lastleaf.parent_node
-		parent.remove_child(lastleaf, suppress_unifurcations=True)
+		#lastleaf=[n for n in t.leaf_nodes() if n.edge_length == 0][0]
+		#parent=lastleaf.parent_node
+		#parent.remove_child(lastleaf, suppress_unifurcations=True)
 		return t
 
 
@@ -39,60 +45,116 @@ class NonNeutralTreeGenerator(TreeGenerator):
 
 	def GetDefaultParams(self):
 		return ParametersDescr({
-			'birth_rf' : (TraitEvolLinearBrownian(), NonNeutralRateFunction)
+			'birth_rf' : (TraitEvolLinearBrownian(), NonNeutralRateFunction),
+			'death_rf' : (ConstantRateFunction(), NonNeutralRateFunction)
 		})
 		
-	def generate(self, num_extant_tips):
-		epsilon = 0.00001 / self.birth_rf.getHighestPosisbleRate() / num_extant_tips
+	def generate(self, num_extant_tips = None, max_time = None):
 		self.birth_rf.updateValues()
+		self.death_rf.updateValues()
+
+		if num_extant_tips is not None:
+			endCondFunc = lambda ext, time: len(ext) >= num_extant_tips or len(ext) == 0
+			epsilon = 0.00001 / (self.birth_rf.getHighestPosisbleRate() + self.death_rf.getHighestPosisbleRate()) / num_extant_tips
+		elif max_time is not None:
+			endCondFunc = lambda ext, time: time >= max_time or len(ext) == 0
+			epsilon = 0.00001 / (self.birth_rf.getHighestPosisbleRate() + self.death_rf.getHighestPosisbleRate())
 
 		taxon_namespace = dendropy.TaxonNamespace()
 		tree = dendropy.Tree(taxon_namespace=taxon_namespace)
 		tree.is_rooted = True
 		tree.seed_node.edge.length = 0.0
-		extant_tips = set([tree.seed_node])
+		extant_tips = [tree.seed_node]
 		extinct_tips = set()
 		
 		total_time = 0
 
-		while len(extant_tips) < num_extant_tips:
+		# Init Birth rates in edge
+		tree.seed_node.edge.birthRates = [(0, self.birth_rf.getRate(tree.seed_node, 0, total_time=0, extant_tips=extant_tips))]
+		tree.seed_node.edge.deathRates = [(0, self.death_rf.getRate(tree.seed_node, 0, total_time=0, extant_tips=extant_tips))]
+
+		#while len(extant_tips) < num_extant_tips and len(extant_tips) > 0:
+		while not endCondFunc(extant_tips, total_time):
 			localTime = 0
 			noEvent = True
 			eventProb = 0
 			# Determine the time of the next event
-			while noEvent:
-				minNextChange = min(self.birth_rf.getNextChange(n, n.edge.length + localTime, total_time=total_time+localTime) for n in extant_tips)
-				eventProb = sum(self.birth_rf.getRate(n, n.edge.length + localTime, total_time=total_time+localTime) for n in extant_tips)
+			while noEvent and len(extant_tips) > 0:
+				allNextChange = [(self.birth_rf.getNextChange(n, n.edge.length + localTime, total_time=total_time+localTime, extant_tips=extant_tips), True) for n in extant_tips]
+				allNextChange += [(self.death_rf.getNextChange(n, n.edge.length + localTime, total_time=total_time+localTime, extant_tips=extant_tips), False) for n in extant_tips]
+				sortedNextChange = sorted(enumerate(allNextChange), key=lambda x:x[1][0])
+				IndNC, vNC = sortedNextChange[0]
+				minNextChange, nextChangeIsBirth = vNC
+
+				allProbs = [(self.birth_rf.getRate(n, n.edge.length + localTime, total_time=total_time+localTime, extant_tips=extant_tips), True) for n in extant_tips]
+				allProbs += [(self.death_rf.getRate(n, n.edge.length + localTime, total_time=total_time+localTime, extant_tips=extant_tips), False) for n in extant_tips]
+				eventProb = sum(prob for prob, tp in allProbs)
+
 				waiting_time = random.expovariate(eventProb)
 				localTime += min(waiting_time, minNextChange + epsilon)
 				noEvent = waiting_time > minNextChange
-
+				# Build rate variations in edges
+				if noEvent:
+					for n, changeIsBirth in [(extant_tips[nc[0] - (len(extant_tips) if not nc[1][1] else 0)], nc[1][1]) for nc in sortedNextChange if nc[1][0] <= minNextChange + epsilon]:
+						if changeIsBirth:
+							n.edge.birthRates.append((total_time + localTime, self.birth_rf.getRate(n, n.edge.length+localTime, total_time=total_time+localTime, extant_tips=extant_tips)))
+						else:
+							n.edge.deathRates.append((total_time + localTime, self.death_rf.getRate(n, n.edge.length+localTime, total_time=total_time+localTime, extant_tips=extant_tips)))
+					
 			# add waiting time to nodes
 			for nd in extant_tips:
 				try:
 					nd.edge.length += localTime
 				except TypeError:
 					nd.edge.length = localTime
+					
 			total_time += localTime
 
 			# Determine in which branch will the event happen
-			event_nodes = [n for n in extant_tips]
-			event_rates = [self.birth_rf.getRate(n, n.edge.length, total_time=total_time) / eventProb for n in event_nodes]
-			nd = probability.weighted_choice(event_nodes, event_rates, rng=random)
+			event_nodes = [(n, True) for n in extant_tips] + [(n, False) for n in extant_tips]
+			event_rates = [self.birth_rf.getRate(n, n.edge.length, total_time=total_time, extant_tips=extant_tips) / eventProb for n in extant_tips]
+			event_rates += [self.death_rf.getRate(n, n.edge.length, total_time=total_time, extant_tips=extant_tips) / eventProb for n in extant_tips]
+			nd, isBirth = probability.weighted_choice(event_nodes, event_rates, rng=random)
 
-			# Branch
-			extant_tips.remove(nd)
-			c1 = nd.new_child()
-			c2 = nd.new_child()
-			c1.edge.length = 0
-			c2.edge.length = 0
-			extant_tips.add(c1)
-			extant_tips.add(c2)
+			# Update rates if they change on split or extinction events
+			if self.birth_rf.IsChangedOnSplitOrDeath():
+				for n in extant_tips:
+					n.edge.birthRates.append((total_time, self.birth_rf.getRate(n, n.edge.length, total_time=total_time, extant_tips=extant_tips)))
+			if self.death_rf.IsChangedOnSplitOrDeath():
+				for n in extant_tips:
+					n.edge.deathRates.append((total_time, self.death_rf.getRate(n, n.edge.length, total_time=total_time, extant_tips=extant_tips)))
 
+			if isBirth:
+				# Branch
+				extant_tips.remove(nd)
+				c1 = nd.new_child()
+				c2 = nd.new_child()
+				extant_tips.append(c1)
+				extant_tips.append(c2)
+				c1.edge.length = 0
+				c2.edge.length = 0
+				c1.edge.birthRates = [(total_time, self.birth_rf.getRate(c1, 0, total_time=total_time, extant_tips=extant_tips))]
+				c2.edge.birthRates = [(total_time, self.birth_rf.getRate(c2, 0, total_time=total_time, extant_tips=extant_tips))]
+				c1.edge.deathRates = [(total_time, self.death_rf.getRate(c1, 0, total_time=total_time, extant_tips=extant_tips))]
+				c2.edge.deathRates = [(total_time, self.death_rf.getRate(c2, 0, total_time=total_time, extant_tips=extant_tips))]
+			else:
+				extant_tips.remove(nd)
+				setattr(nd, 'is_extinct', True)
+
+		# Cut to appropriate time if simulation went too far
+		if max_time is not None and total_time > max_time:
+			if isBirth:
+				parent = c1.parent_node
+				parent.remove_child(c1)
+				parent.remove_child(c2)
+			for n in tree.leaf_nodes():
+				n.edge.length -= total_time - max_time
+			
+		# TODO What to do about this?
 		# Get last nodes generated (a cherry with branch lenghts = 0) and replace a cherry by one single node
-		lastleaf=[n for n in tree.leaf_nodes() if n.edge_length == 0][0]
-		parent=lastleaf.parent_node
-		parent.remove_child(lastleaf, suppress_unifurcations=True)
+		#lastleaf=[n for n in tree.leaf_nodes() if n.edge_length == 0][0]
+		#parent=lastleaf.parent_node
+		#parent.remove_child(lastleaf, suppress_unifurcations=True)
 		return tree
 
 ##################
@@ -120,6 +182,24 @@ class NonNeutralRateFunction(Parameterizable, DashInterfacable):
 	def updateValues(self):
 		pass
 
+	def IsChangedOnSplitOrDeath(self):
+		return False
+
+class ConstantRateFunction(NonNeutralRateFunction):
+	def GetDefaultParams(self):
+		return ParametersDescr({
+			'rate' : (0.0,),
+		})
+
+	def getRate(self, node, time, **kwargs):
+		return self.rate
+	
+	def getNextChange(self, node, time, **kwargs):
+		return math.inf
+
+	def getHighestPosisbleRate(self):
+		return self.rate
+
 class ExplosiveRadiationRateFunc(NonNeutralRateFunction):
 	def GetDefaultParams(self):
 		return ParametersDescr({
@@ -138,6 +218,10 @@ class ExplosiveRadiationRateFunc(NonNeutralRateFunction):
 		return self.basalRate
 
 class TraitEvolLinearBrownian(NonNeutralRateFunction):
+	def __init__(self):
+		NonNeutralRateFunction.__init__(self)
+		self.traitValname = 'traitVal' + str(id(self))
+
 	def GetDefaultParams(self):
 		return ParametersDescr({
 			'basalRate' : (1.0,),
@@ -146,14 +230,14 @@ class TraitEvolLinearBrownian(NonNeutralRateFunction):
 		})
 
 	def getRate(self, node, time, **kwargs):
-		if hasattr(node, 'traitVal'):
-			return node.traitVal
+		if hasattr(node, self.traitValname):
+			return getattr(node, self.traitValname)
 		else:
 			if node.parent_node is None:
-				node.traitVal = self.basalRate
+				setattr(node, self.traitValname, self.basalRate)
 			else:
-				node.traitVal = max(self.lowestRate, node.parent_node.traitVal + np.random.normal(0, self.sigma))
-			return node.traitVal
+				setattr(node, self.traitValname, max(self.lowestRate, getattr(node.parent_node, self.traitValname) + np.random.normal(0, self.sigma)))
+			return getattr(node, self.traitValname)
 
 	def getNextChange(self, node, time, **kwargs):
 		return math.inf
@@ -168,10 +252,10 @@ class ExtendedExplRadRateFunc(NonNeutralRateFunction):
 
 	def GetDefaultParams(self):
 		return ParametersDescr({
-			'endDelay' : (0.1,),
-			'nbSteps' : (4, int),
+			'endDelay' : (1.5,),
+			'nbSteps' : (10, int),
 			'basalRate' : (1.0,),
-			'lowRate' : (0.01,)
+			'lowRate' : (0.4,)
 		})
 
 	def getRate(self, node, time, **kwargs):
@@ -192,7 +276,7 @@ class ExtendedExplRadRateFunc(NonNeutralRateFunction):
 	def updateValues(self):
 		self.stepTimes = [self.endDelay * ((i+1) / self.nbSteps) for i in range(self.nbSteps)]
 		
-class PhaseBirthRateFunc(NonNeutralRateFunction):
+class PhaseRateFunc(NonNeutralRateFunction):
 	def __init__(self):
 		NonNeutralRateFunction.__init__(self)
 		self.stepVals = []
@@ -200,10 +284,10 @@ class PhaseBirthRateFunc(NonNeutralRateFunction):
 	
 	def GetDefaultParams(self):
 		return ParametersDescr({
-			'period' : (10,),
+			'period' : (10.0,float),
 			'nbSteps' : (10, int),
-			'maxRate' : (1.0,),
-			'minRate' : (0.01,),
+			'maxRate' : (1.0,float),
+			'minRate' : (0.01,float),
 			'periodFunc' : ('lambda t:(1+math.sin(t*2*math.pi))/2',)
 		})
 
@@ -221,4 +305,30 @@ class PhaseBirthRateFunc(NonNeutralRateFunction):
 	def getHighestPosisbleRate(self):
 		return self.maxRate
 	
+class ExtantSizeRateFunc(NonNeutralRateFunction):
+	def __init__(self):
+		NonNeutralRateFunction.__init__(self)
+		self.actualFunc = lambda x:x
+		self.lastNbExtant = 1
+
+	def GetDefaultParams(self):
+		return ParametersDescr({
+			'func' : ('lambda n:0.5*math.log((1+math.exp(n - 20)))',)
+		})
+
+	def updateValues(self):
+		self.actualFunc = eval(self.func)
+
+	def getRate(self, node, time, extant_tips = set(), **kwargs):
+		self.lastNbExtant = len(extant_tips)
+		return self.actualFunc(len(extant_tips))
+
+	def getNextChange(self, node, time, extant_tips = set(), **kwargs):
+		return math.inf
+
+	def getHighestPosisbleRate(self):
+		return max(self.actualFunc(self.lastNbExtant + 1), self.actualFunc(self.lastNbExtant - 1))
+
+	def IsChangedOnSplitOrDeath(self):
+		return True
 

@@ -1,14 +1,10 @@
 import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output, State
+import dash
+import random
 
 from Utilities import *
-
-# Interfacable abstract base class
-class Interfacable(ABC):
-	@abstractmethod
-	def GetLayout(self, hideParams = False, hideUsage = False):
-		pass
 
 def getDCCElemForType(elemId, name, cls, val):
 	elem = None
@@ -51,11 +47,11 @@ class DashFieldData:
 		self.subKey = subKey
 
 class DashUseData:
-	def __init__(self, elemId, fieldName, obj, func):
+	def __init__(self, elemId, fieldName, obj, clickData):
 		self.id = elemId
 		self.fieldName = fieldName
 		self.obj = obj
-		self.func = func
+		self.clickData = clickData
 
 class DashDropDownData:
 	def __init__(self, elemId, fieldName, obj, attrName, ddDivId, allSavkKeys):
@@ -69,6 +65,8 @@ class DashDropDownData:
 # Interfacable elements for Dash
 class DashInterfacable(Interfacable):
 	def __init__(self):
+		Interfacable.__init__(self)
+
 		self.subAuthValsObj = {}
 		self._fullDivId = self._getElemId('special', 'all')
 		self._uselessDivIds = {name:self._getElemId('special', 'uselessDiv'+name) for name in ['use', 'all', 'anyParamChange']}
@@ -91,7 +89,7 @@ class DashInterfacable(Interfacable):
 		return None
 
 	# Overload this method to build the signals of the inner layout
-	def _buildInnerLayoutSignals(self):
+	def _buildInnerLayoutSignals(self, app):
 		return None
 
 	def _getCustomLayout(self, name):
@@ -119,7 +117,12 @@ class DashInterfacable(Interfacable):
 						setattr(dfd.obj, dfd.attrName, self.subAuthValsObj[savk])
 					else:
 						cls = type(oldVal)
-						setattr(dfd.obj, dfd.attrName, cls(v))
+						try:
+							# First try to build it from cls and value
+							setattr(dfd.obj, dfd.attrName, cls(v))
+						except:
+							# Otherwise, try by interpreting it
+							setattr(dfd.obj, dfd.attrName, eval(v))
 				else:
 					oldVal = getattr(dfd.obj, dfd.attrName)
 					if type(oldVal) == tuple:
@@ -139,18 +142,21 @@ class DashInterfacable(Interfacable):
 						except:
 							raise ValueError('Attribute {} of object {} cannot be updated with subkey {}.'.format(dfd.attrName, dfd.obj, dfd.subKey))
 					setattr(dfd.obj, dfd.attrName, oldVal)
-			# Then re-generate the layout
-			#fullLayout = self.GetLayout()# TODO Options ?
-			return ''
+			return random.random()
 		return UpdateValues
 
 	def _generateUseCallback(self):
 		def CallMethods(*values):
 			for v, ufd in zip(values, self._useData):
 				if v is not None and v > 0:
-					ufd.func(ufd.obj)
-			fullLayout = self.GetLayout()# TODO Options ?
+					ufd.clickData.func(ufd.obj)
+			fullLayout = self.GetLayout()
 			return fullLayout.children
+		return CallMethods
+
+	def _generateTargetedUseCallback(self, ud):
+		def CallMethods(value):
+			return ud.clickData.func(ud.obj)
 		return CallMethods
 
 	def _generateDropDownCallback(self, obj):
@@ -159,9 +165,13 @@ class DashInterfacable(Interfacable):
 			return style
 		return UpdateDropDown
 
-	def _generateAnyChangeCallback(self, acc):
+	def _generateAnyChangeCallback(self, acc = lambda *v:random.random()):
 		def AnyChangeCB(*values):
-			return acc(values)
+			if any(val != '' for val in values):
+				return acc(values)
+			else:
+				raise dash.exceptions.PreventUpdate()
+				return ''
 		return AnyChangeCB
 
 	# Bind all signals
@@ -183,9 +193,15 @@ class DashInterfacable(Interfacable):
 				app.callback(Output(outId, 'style'), [Input(ddd.id, ddd.fieldName)], [State(outId, 'style')])(self._generateDropDownCallback(obj))
 				anyChangeInputs.append(Input(outId, 'style'))
 
-		# Then handle action signals
-		allInputs = [Input(ud.id, ud.fieldName) for ud in self._useData]
+		# Then handle default action signals
+		allInputs = [Input(ud.id, ud.fieldName) for ud in self._useData if ud.clickData.outputName is None]
 		app.callback(Output(self._fullDivId, 'children'), allInputs)(self._generateUseCallback())
+
+		# Then handle targeted action signals
+		for ud in self._useData:
+			if ud.clickData.outputName is not None:
+				ot, on, of = ud.clickData.outputType, ud.clickData.outputName, ud.clickData.outputField
+				app.callback(Output(self._getElemId(ot, on), of), [Input(ud.id, ud.fieldName)])(self._generateTargetedUseCallback(ud))
 
 		# Then treat signals of parameters sublayouts
 		for name, obj in self.subAuthValsObj.items():
@@ -194,20 +210,20 @@ class DashInterfacable(Interfacable):
 			anyChangeInputs.append(Input(obj._uselessDivIds['anyParamChange'], 'children'))
 
 		# Bind signals to detect any change in parameters or subparameters
-		app.callback(Output(self._uselessDivIds['anyParamChange'], 'children'), anyChangeInputs)(lambda *x:'')
+		app.callback(Output(self._uselessDivIds['anyParamChange'], 'children'), anyChangeInputs)(self._generateAnyChangeCallback())
 		for key, callBack in anyChangeCallBacks.items():
 			app.callback(Output(key[0], key[1]), anyChangeInputs)(self._generateAnyChangeCallback(callBack))
 
 		# Build inner layout signals
-		self._buildInnerLayoutSignals()
+		self._buildInnerLayoutSignals(app)
 						
 
 	# Returns the current layout
-	def GetLayout(self, hideParams = False, hideUsage = False, hideFull = False):
+	def GetLayout(self, hideParams = False, hideUsage = False, hideFull = False, hideTitle = False):
 		print('getting Layout for {}'.format(self))
 		params = []
 		uses = []
-		defaultTypes = [str, int, bool, float, tuple, range]
+		defaultTypes = [str, int, bool, float, tuple, range, ReferenceHolder]
 
 		# First display self parameters
 		if isinstance(self, Parameterizable):
@@ -232,7 +248,13 @@ class DashInterfacable(Interfacable):
 				# Make a dropdown in case several authorized values are available
 				if authVals is not None:
 					if (cls in defaultTypes and currVal not in authVals) or (cls not in defaultTypes and currVal.__class__ not in authVals):
-						raise ValueError('{} is not part of the authorized values: {}'.format(currVal, authVals))
+						if isinstance(currVal, ReferenceHolder) and currVal.value is None:
+							# Special case of reference holder
+							currVal = authVals[0]
+							setattr(self, name, currVal)
+						else:
+							# Otherwise
+							raise ValueError('{} is not part of the authorized values: {}'.format(currVal, authVals))
 					params.append(
 						html.Div([
 						html.Label(name),
@@ -240,7 +262,7 @@ class DashInterfacable(Interfacable):
 							id = elemId,
 							options=[{'label': self._getDropDownValName(av, cls, defaultTypes),
 									'value': self._getDropDownValName(av, cls, defaultTypes)} for av in authVals], 
-							value=currVal if cls in defaultTypes else currVal.__class__.__name__,
+							value=self._getDropDownValName(currVal, cls, defaultTypes) if cls in defaultTypes else currVal.__class__.__name__,
 							clearable=False
 						)]))
 					if self._fillFieldData:
@@ -259,7 +281,7 @@ class DashInterfacable(Interfacable):
 				allSavkKeys = []
 				if isinstance(currVal, Interfacable):
 					# Add the visible one
-					subLayouts.append(currVal.GetLayout())
+					subLayouts.append(currVal.GetLayout(hideTitle = True))
 					savk = self._getSubAuthValKey(name, type(currVal))
 					allSavkKeys.append(savk)
 					if savk not in self.subAuthValsObj:
@@ -272,46 +294,48 @@ class DashInterfacable(Interfacable):
 							allSavkKeys.append(savk)
 							if savk not in self.subAuthValsObj:
 								self.subAuthValsObj[savk] = av()
-							subLayouts.append(self.subAuthValsObj[savk].GetLayout(hideFull = True))
+							subLayouts.append(self.subAuthValsObj[savk].GetLayout(hideFull = True, hideTitle=True))
 				if len(subLayouts) > 0:
 					ddDivId = self._getElemId('dropDownDiv', name)
-					params.append(html.Div(subLayouts, id=ddDivId, style={'border-style':'solid', 'border-width':'1px'}))
+					params.append(html.Div(subLayouts, id=ddDivId))#, style={'border-style':'solid', 'border-width':'1px'}))
 					if self._fillFieldData and len(subLayouts) > 1:
 						self._dropDownData.append(DashDropDownData(elemId, 'value', self, name, ddDivId, allSavkKeys))
 
 		# Then display self uses
 		if not hideUsage and isinstance(self, Usable):
 			allUses = self.GetUsableMethods()
-			for name, func in allUses.items():
+			for name, clickData in allUses.items():
 				elemId = self._getElemId('uses', name)
 				uses.append(html.Button(name, id=elemId))
 				if self._fillFieldData:
-					self._useData.append(DashUseData(elemId, 'n_clicks', self, func))
+					self._useData.append(DashUseData(elemId, 'n_clicks', self, clickData))
 
 		# Then display inner layout if it exists
 		innerElem = html.Div(self._getInnerLayout(), id=self._getElemId('special', 'innerLayout'))
 
 		# Build Final Layout
-		# TODO Write different layout arrangements
 		paramStyle = {'display': 'none' if hideParams else 'inline-block'}
 		useStyle = {'display': 'none' if hideUsage else 'inline-block'}
-		fullStyle = {'display':'none' if hideFull else 'inline-block', 'width':'100%'}
+		fullStyle = {'display':'none' if hideFull else 'inline-block'}
+		titleStyle = {'display':'none' if hideTitle else 'inline-block'}
 		uselessStyle = {'display':'none'}
 
-		uselessDivs = [html.Div(id=idv, style=uselessStyle) for nm, idv in self._uselessDivIds.items()]
+		titleDiv = html.Div(html.H5(self.GetUniqueName()), style=titleStyle)
+
+		uselessDivs = [html.Div(id=idv, style=uselessStyle, children='') for nm, idv in self._uselessDivIds.items()]
 
 		controlDivs = [self._getCustomLayout('params').GetLayout(params, style = paramStyle)]
 		if len(uses) > 0:
 			controlDivs.append(self._getCustomLayout('uses').GetLayout(uses, style=useStyle))
 		controls = self._getCustomLayout('controls').GetLayout(controlDivs)
 
-		allDivs = uselessDivs + [controls]
+		allDivs = [titleDiv] + uselessDivs + [controls]
 		if innerElem is not None:
 			allDivs.append(innerElem)
 
 		allDiv = self._getCustomLayout('all').GetLayout(allDivs)
 
-		finalElem = html.Div(id=self._fullDivId, children=allDiv, style=fullStyle)
+		finalElem = html.Div(id=self._fullDivId, children=allDiv, style=fullStyle, className='InterfaceBlock')
 
 		self._fillFieldData = False
 		return finalElem
@@ -325,7 +349,7 @@ class DashLayout(ABC):
 
 # Horizontal layout
 class DashHorizontalLayout(DashLayout):
-	def __init__(self, widthFunc = lambda ind, tot:int(100/tot)):
+	def __init__(self, widthFunc = lambda ind, tot:int(100/(tot+0.001))):
 		self.widthFunc = widthFunc
 
 	def GetLayout(self, elems, style={}):
@@ -337,6 +361,7 @@ class DashHorizontalLayout(DashLayout):
 				e.style = {}
 			if 'display' not in e.style or e.style['display'] != 'none':
 				e.style['display'] = 'inline-block'
+				e.style['vertical-align'] = 'top'
 				e.style['width'] = '{}%'.format(self.widthFunc(visInd, nbVisElems))
 				visInd += 1
 		return html.Div(elems, style=style) if len(style) > 0 else html.Div(elems)

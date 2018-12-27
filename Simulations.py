@@ -49,7 +49,7 @@ class TreeLoaderSim(SimulationRunner, DashInterfacable):
 		return ['trees']
 
 	def Simulate(self):
-		res = Results()
+		res = Results(self)
 		if os.path.isfile(self.path):
 			try:
 				with open(self.path, 'r') as f:

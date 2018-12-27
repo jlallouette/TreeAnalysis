@@ -224,7 +224,7 @@ class Results(object):
 					else:
 						self.attributes[name].append(oah)
 			else:
-				self.attributes[name] = lst
+				self.attributes[name] = copy.copy(lst)
 
 	def ReOwn(self, newOner):
 		object.__setattr__(self, 'owner', newOner)

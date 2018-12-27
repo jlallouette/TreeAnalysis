@@ -91,6 +91,18 @@ class MaxTimeStopCrit(StoppingCriteria):
 				if not hasattr(n, 'is_extinct') or not n.is_extinct:
 					n.edge.length -= total_time - self.max_time
 
+class NumLeavesStopCrit(StoppingCriteria):
+	def GetDefaultParams(self):
+		return ParametersDescr({
+			'num_leaves' : (20, int),
+		})
+
+	def shouldStop(self, extant_tips, extinct_tips, **kwargs):
+		return len(extant_tips) + len(extinct_tips) >= self.num_leaves or len(extant_tips) == 0
+	
+	def isFinished(self, tree):
+		return len(tree.leaf_nodes()) >= self.num_leaves
+
 ##########################
 # Tree Generator classes #
 ##########################
@@ -191,6 +203,7 @@ class RateFunctionTreeGenerator(TreeGenerator):
 				c2.edge.deathRates = [(total_time, self.death_rf.getRate(c2, 0, total_time=total_time, extant_tips=extant_tips))]
 			else:
 				extant_tips.remove(nd)
+				extinct_tips.add(nd)
 				setattr(nd, 'is_extinct', True)
 
 		# Correct the tree if the stopping criterion was not exactly respected (over time, etc)

@@ -13,32 +13,89 @@ class TreeGenerator(Parameterizable, DashInterfacable):
 		DashInterfacable.__init__(self)
 
 	@abstractmethod
-	def generate(self, num_extant_tips = None, max_time = None):
+	def generate(self, stopCriteria):
 		pass
 
-class NeutralTreeGenerator(TreeGenerator):
+#class NeutralTreeGenerator(TreeGenerator):
+#	def GetDefaultParams(self):
+#		return ParametersDescr({
+#			'birth_rate' : (1.0,),
+#			'death_rate' : (0.0,)
+#		})
+#
+#	def generate(self, num_extant_tips = None, max_time = None):
+#		if num_extant_tips is not None:
+#			t = treesim.birth_death_tree(birth_rate=self.birth_rate, death_rate=self.death_rate, num_extant_tips=num_extant_tips, is_retain_extinct_tips = True)
+#		elif max_time is not None:
+#			t = treesim.birth_death_tree(birth_rate=self.birth_rate, death_rate=self.death_rate, max_time=max_time, is_retain_extinct_tips = True)
+#		else:
+#			raise ValueError('At least one ending condition must be specified.')
+#
+#		# TODO Fix max_time here
+#
+#		# TODO What to do about this?
+#		# Get last nodes generated (a cherry with branch lenghts = 0) and replace a cherry by one single node
+#		#lastleaf=[n for n in t.leaf_nodes() if n.edge_length == 0][0]
+#		#parent=lastleaf.parent_node
+#		#parent.remove_child(lastleaf, suppress_unifurcations=True)
+#		return t
+
+
+# Utility class for tree generators
+class StoppingCriteria(Parameterizable, DashInterfacable):
+	def __init__(self):
+		Parameterizable.__init__(self)
+		DashInterfacable.__init__(self)
+
+	@abstractmethod
+	def shouldStop(self, **kwargs):
+		pass
+
+	def isFinished(self, tree):
+		return True
+
+	def correctTree(self, **kwargs):
+		pass
+
+class NumExtantStopCrit(StoppingCriteria):
 	def GetDefaultParams(self):
 		return ParametersDescr({
-			'birth_rate' : (1.0,),
-			'death_rate' : (0.0,)
+			'num_extant_tips' : (20, int),
 		})
 
-	def generate(self, num_extant_tips = None, max_time = None):
-		if num_extant_tips is not None:
-			t = treesim.birth_death_tree(birth_rate=self.birth_rate, death_rate=self.death_rate, num_extant_tips=num_extant_tips, is_retain_extinct_tips = True)
-		elif max_time is not None:
-			t = treesim.birth_death_tree(birth_rate=self.birth_rate, death_rate=self.death_rate, max_time=max_time, is_retain_extinct_tips = True)
-		else:
-			raise ValueError('At least one ending condition must be specified.')
-		# TODO What to do about this?
-		# Get last nodes generated (a cherry with branch lenghts = 0) and replace a cherry by one single node
-		#lastleaf=[n for n in t.leaf_nodes() if n.edge_length == 0][0]
-		#parent=lastleaf.parent_node
-		#parent.remove_child(lastleaf, suppress_unifurcations=True)
-		return t
+	def shouldStop(self, extant_tips, **kwargs):
+		return len(extant_tips) >= self.num_extant_tips or len(extant_tips) == 0
+	
+	def isFinished(self, tree):
+		return len([n for n in tree.leaf_nodes() if not hasattr(n, 'is_extinct') or not n.is_extinct]) >= self.num_extant_tips
 
+class MaxTimeStopCrit(StoppingCriteria):
+	def GetDefaultParams(self):
+		return ParametersDescr({
+			'max_time' : (3.0, float),
+		})
 
-class NonNeutralTreeGenerator(TreeGenerator):
+	def shouldStop(self, total_time, extant_tips, **kwargs):
+		return total_time >= self.max_time or len(extant_tips) == 0
+	
+	def isFinished(self, tree):
+		return max(tree.calc_node_root_distances(return_leaf_distances_only=True)) + tree.seed_node.edge.length >= self.max_time
+
+	def correctTree(self, tree, c1, c2, total_time, isBirth, **kwargs):
+		if total_time > self.max_time:
+			if isBirth:
+				parent = c1.parent_node
+				parent.remove_child(c1)
+				parent.remove_child(c2)
+			for n in tree.leaf_nodes():
+				if not hasattr(n, 'is_extinct') or not n.is_extinct:
+					n.edge.length -= total_time - self.max_time
+
+##########################
+# Tree Generator classes #
+##########################
+
+class RateFunctionTreeGenerator(TreeGenerator):
 	def __init__(self):
 		TreeGenerator.__init__(self)
 
@@ -49,16 +106,9 @@ class NonNeutralTreeGenerator(TreeGenerator):
 			'death_rf' : (ConstantRateFunction(), NonNeutralRateFunction)
 		})
 		
-	def generate(self, num_extant_tips = None, max_time = None):
+	def generate(self, stopCriteria):
 		self.birth_rf.updateValues()
 		self.death_rf.updateValues()
-
-		if num_extant_tips is not None:
-			endCondFunc = lambda ext, time: len(ext) >= num_extant_tips or len(ext) == 0
-			epsilon = 0.00001 / (self.birth_rf.getHighestPosisbleRate() + self.death_rf.getHighestPosisbleRate()) / num_extant_tips
-		elif max_time is not None:
-			endCondFunc = lambda ext, time: time >= max_time or len(ext) == 0
-			epsilon = 0.00001 / (self.birth_rf.getHighestPosisbleRate() + self.death_rf.getHighestPosisbleRate())
 
 		taxon_namespace = dendropy.TaxonNamespace()
 		tree = dendropy.Tree(taxon_namespace=taxon_namespace)
@@ -74,12 +124,12 @@ class NonNeutralTreeGenerator(TreeGenerator):
 		tree.seed_node.edge.deathRates = [(0, self.death_rf.getRate(tree.seed_node, 0, total_time=0, extant_tips=extant_tips))]
 
 		#while len(extant_tips) < num_extant_tips and len(extant_tips) > 0:
-		while not endCondFunc(extant_tips, total_time):
+		while not stopCriteria.shouldStop(**{k:v for k, v in locals().items() if k!='self'}):
 			localTime = 0
 			noEvent = True
 			eventProb = 0
 			# Determine the time of the next event
-			while noEvent and len(extant_tips) > 0:
+			while noEvent and not stopCriteria.shouldStop(**{k:v for k, v in locals().items() if k!='self'}):
 				allNextChange = [(self.birth_rf.getNextChange(n, n.edge.length + localTime, total_time=total_time+localTime, extant_tips=extant_tips), True) for n in extant_tips]
 				allNextChange += [(self.death_rf.getNextChange(n, n.edge.length + localTime, total_time=total_time+localTime, extant_tips=extant_tips), False) for n in extant_tips]
 				sortedNextChange = sorted(enumerate(allNextChange), key=lambda x:x[1][0])
@@ -89,6 +139,8 @@ class NonNeutralTreeGenerator(TreeGenerator):
 				allProbs = [(self.birth_rf.getRate(n, n.edge.length + localTime, total_time=total_time+localTime, extant_tips=extant_tips), True) for n in extant_tips]
 				allProbs += [(self.death_rf.getRate(n, n.edge.length + localTime, total_time=total_time+localTime, extant_tips=extant_tips), False) for n in extant_tips]
 				eventProb = sum(prob for prob, tp in allProbs)
+				# Recompute epsilon according to the current event rate
+				epsilon = 0.00001 / max(1, eventProb)
 
 				waiting_time = random.expovariate(eventProb)
 				localTime += min(waiting_time, minNextChange + epsilon)
@@ -141,20 +193,9 @@ class NonNeutralTreeGenerator(TreeGenerator):
 				extant_tips.remove(nd)
 				setattr(nd, 'is_extinct', True)
 
-		# Cut to appropriate time if simulation went too far
-		if max_time is not None and total_time > max_time:
-			if isBirth:
-				parent = c1.parent_node
-				parent.remove_child(c1)
-				parent.remove_child(c2)
-			for n in tree.leaf_nodes():
-				n.edge.length -= total_time - max_time
+		# Correct the tree if the stopping criterion was not exactly respected (over time, etc)
+		stopCriteria.correctTree(**{k:v for k, v in locals().items() if k!='self'})
 			
-		# TODO What to do about this?
-		# Get last nodes generated (a cherry with branch lenghts = 0) and replace a cherry by one single node
-		#lastleaf=[n for n in tree.leaf_nodes() if n.edge_length == 0][0]
-		#parent=lastleaf.parent_node
-		#parent.remove_child(lastleaf, suppress_unifurcations=True)
 		return tree
 
 ##################

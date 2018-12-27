@@ -13,11 +13,13 @@ class SimulationManager:
 			self.simulations = {}
 
 	def SaveSimulations(self):
+		# TODO first write to tmp file and then copy
 		with open(self.fname, 'wb') as f:
 			pickle.dump(self.simulations, f)
 
 	def __del__(self):
-		self.SaveSimulations()
+		pass
+		#self.SaveSimulations()
 
 	def GetKeyTuple(self, simRunner):
 		return (type(simRunner).__name__,) + simRunner.GetParamKeyTuple()
@@ -25,15 +27,22 @@ class SimulationManager:
 	def GetSimulationResult(self, simRunner, useMemoization = False):
 		if useMemoization:
 			kt = self.GetKeyTuple(simRunner)
+			updated = False
 			if kt not in self.simulations:
 				print('Running simulation')
 				self.simulations[kt] = simRunner.Simulate()
+				print('saving', self.simulations[kt].GetOwnedAttr('trees'))
 				res = self.simulations[kt]
+				updated = True
 			else:
+				print('match found', self.simulations[kt].GetOwnedAttr('trees'))
 				res = copy.deepcopy(self.simulations[kt])
+				print('after copy', res.GetOwnedAttr('trees'))
 				# Re-owns the simulation
 				res.ReOwn(simRunner)
-			self.SaveSimulations()
+				print('after reOwned', res.GetOwnedAttr('trees'))
+			if updated:
+				self.SaveSimulations()
 			return res
 		else:
 			return simRunner.Simulate()

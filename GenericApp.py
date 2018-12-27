@@ -20,7 +20,9 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 	def Analyze(self):
 		res = Results(self)
 		for sim in self.simulations:
+			print('before', res.GetOwnedAttr('trees'))
 			res.addResults(self.simManager.GetSimulationResult(sim, self.memoize))
+			print('after', res.GetOwnedAttr('trees'))
 
 		for analyzer in self.analyzers:
 			res.addResults(analyzer.Analyze(res))

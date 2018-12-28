@@ -7,8 +7,12 @@ class SimulationManager:
 	def __init__(self, fname = 'Simulations.pkl'):
 		self.fname = fname
 		if os.path.isfile(fname):
-			with open(fname, 'rb') as f:
-				self.simulations = pickle.load(f)
+			try:
+				with open(fname, 'rb') as f:
+					self.simulations = pickle.load(f)
+			except:
+				raise Warning('')
+				self.simulations = {}
 		else:
 			self.simulations = {}
 
@@ -16,10 +20,6 @@ class SimulationManager:
 		# TODO first write to tmp file and then copy
 		with open(self.fname, 'wb') as f:
 			pickle.dump(self.simulations, f)
-
-	def __del__(self):
-		pass
-		#self.SaveSimulations()
 
 	def GetKeyTuple(self, simRunner):
 		return (type(simRunner).__name__,) + simRunner.GetParamKeyTuple()

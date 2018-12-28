@@ -114,15 +114,22 @@ class DashInterfacable(Interfacable):
 					oldVal = getattr(dfd.obj, dfd.attrName)
 					if isinstance(oldVal, Parameterizable):
 						savk = self._getSubAuthValKey(dfd.attrName, v)
-						setattr(dfd.obj, dfd.attrName, self.subAuthValsObj[savk])
+						if oldVal != self.subAuthValsObj[savk]:
+							setattr(dfd.obj, dfd.attrName, self.subAuthValsObj[savk])
+						else:
+							raise dash.exceptions.PreventUpdate
 					else:
 						cls = type(oldVal)
 						try:
 							# First try to build it from cls and value
-							setattr(dfd.obj, dfd.attrName, cls(v))
+							newVal = cls(v)
 						except:
 							# Otherwise, try by interpreting it
-							setattr(dfd.obj, dfd.attrName, eval(v))
+							newVal = eval(v)
+						if oldVal != newVal:
+							setattr(dfd.obj, dfd.attrName, newVal)
+						else:
+							raise dash.exceptions.PreventUpdate
 				else:
 					oldVal = getattr(dfd.obj, dfd.attrName)
 					if type(oldVal) == tuple:
@@ -141,7 +148,10 @@ class DashInterfacable(Interfacable):
 							oldVal[dfd.subKey] = cls(v)
 						except:
 							raise ValueError('Attribute {} of object {} cannot be updated with subkey {}.'.format(dfd.attrName, dfd.obj, dfd.subKey))
-					setattr(dfd.obj, dfd.attrName, oldVal)
+					if getattr(dfd.obj, dfd.attrName) != oldVal:
+						setattr(dfd.obj, dfd.attrName, oldVal)
+					else:
+						raise dash.exceptions.PreventUpdate
 			return random.random()
 		return UpdateValues
 
@@ -161,7 +171,16 @@ class DashInterfacable(Interfacable):
 
 	def _generateDropDownCallback(self, obj):
 		def UpdateDropDown(value, style):
-			style['display'] = 'block' if value == obj.__class__.__name__ else 'none'
+			if value == obj.__class__.__name__:
+				if style['display'] == 'none':
+					style['display'] = 'block'
+				else:
+					raise dash.exceptions.PreventUpdate
+			else:
+				if style['display'] != 'none':
+					style['display'] = 'none'
+				else:
+					raise dash.exceptions.PreventUpdate
 			return style
 		return UpdateDropDown
 
@@ -170,8 +189,8 @@ class DashInterfacable(Interfacable):
 			if any(val != '' for val in values):
 				return acc(values)
 			else:
-				raise dash.exceptions.PreventUpdate()
-				return ''
+				raise dash.exceptions.PreventUpdate
+			return ''
 		return AnyChangeCB
 
 	# Bind all signals

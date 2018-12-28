@@ -109,6 +109,7 @@ class DashInterfacable(Interfacable):
 	def _generateFieldCallback(self):
 		def UpdateValues(*values):
 			# First update all values
+			oneUpdt = False
 			for v, dfd in zip(values, self._fieldData):
 				if dfd.subKey is None:
 					oldVal = getattr(dfd.obj, dfd.attrName)
@@ -116,8 +117,7 @@ class DashInterfacable(Interfacable):
 						savk = self._getSubAuthValKey(dfd.attrName, v)
 						if oldVal != self.subAuthValsObj[savk]:
 							setattr(dfd.obj, dfd.attrName, self.subAuthValsObj[savk])
-						else:
-							raise dash.exceptions.PreventUpdate
+							oneUpdt = True
 					else:
 						cls = type(oldVal)
 						try:
@@ -128,8 +128,7 @@ class DashInterfacable(Interfacable):
 							newVal = eval(v)
 						if oldVal != newVal:
 							setattr(dfd.obj, dfd.attrName, newVal)
-						else:
-							raise dash.exceptions.PreventUpdate
+							oneUpdt = True
 				else:
 					oldVal = getattr(dfd.obj, dfd.attrName)
 					if type(oldVal) == tuple:
@@ -150,8 +149,9 @@ class DashInterfacable(Interfacable):
 							raise ValueError('Attribute {} of object {} cannot be updated with subkey {}.'.format(dfd.attrName, dfd.obj, dfd.subKey))
 					if getattr(dfd.obj, dfd.attrName) != oldVal:
 						setattr(dfd.obj, dfd.attrName, oldVal)
-					else:
-						raise dash.exceptions.PreventUpdate
+						oneUpdt = True
+			if not oneUpdt:
+				raise dash.exceptions.PreventUpdate
 			return random.random()
 		return UpdateValues
 

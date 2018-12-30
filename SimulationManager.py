@@ -31,16 +31,12 @@ class SimulationManager:
 			if kt not in self.simulations:
 				print('Running simulation')
 				self.simulations[kt] = simRunner.Simulate()
-				print('saving', self.simulations[kt].GetOwnedAttr('trees'))
 				res = self.simulations[kt]
 				updated = True
 			else:
-				print('match found', self.simulations[kt].GetOwnedAttr('trees'))
 				res = copy.deepcopy(self.simulations[kt])
-				print('after copy', res.GetOwnedAttr('trees'))
 				# Re-owns the simulation
 				res.ReOwn(simRunner)
-				print('after reOwned', res.GetOwnedAttr('trees'))
 			if updated:
 				self.SaveSimulations()
 			return res
@@ -56,11 +52,12 @@ class InputOutput:
 		return []
 
 # Interface for simulation runner classes
-class SimulationRunner(AppParameterizable, Usable, InputOutput):
+class SimulationRunner(AppParameterizable, Usable, InputOutput, ResultHolder):
 	def __init__(self):
 		AppParameterizable.__init__(self)
 		Usable.__init__(self)
 		InputOutput.__init__(self)
+		ResultHolder.__init__(self)
 
 	# returns a result object
 	@abstractmethod

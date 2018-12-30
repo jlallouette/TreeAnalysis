@@ -2,12 +2,12 @@ from Utilities import *
 from Simulations import *
 
 # Result analyzer ABC
-class ResultAnalyzer(AppParameterizable, InputOutput):
+class ResultAnalyzer(AppParameterizable, InputOutput, ResultHolder):
 	def __init__(self):
 		AppParameterizable.__init__(self)
 		InputOutput.__init__(self)
+		ResultHolder.__init__(self)
 		self._toUpdateOnModif = []
-		self.results = Results(self)
 
 	# Returns a new result object containing newly computed values
 	@abstractmethod
@@ -60,7 +60,6 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 
 		self._setCustomLayout('params', DashHorizontalLayout())
 		self.smoothedRate = {name:{} for name in RateNames}
-		self.maxTimes = {}
 
 	def GetDefaultParams(self):
 		dct = {
@@ -79,7 +78,6 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 		if not results.HasAttr('trees'):
 			return self.results
 
-		self.maxTimes = {}
 		self.results.addResults(results)
 		res = self.results
 		for ownedTrees in results.GetOwnedAttr('trees'):
@@ -90,11 +88,11 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 				ageFunc = lambda t: (lambda n: (t.seed_node.edge.length if t.seed_node.edge.length is not None else 0) + n.root_distance)
 
 				res.rawRate = {name:[] for name in RateNames}
-				self.maxTimes[mtKey] = []
+				res.maxTimes = []
 				for i, t in enumerate(trees):
 					t.calc_node_root_distances()
 					t.calc_node_ages(set_node_age_fn = ageFunc(t))
-					self.maxTimes[mtKey].append(max(nd.age for nd in t))
+					res.maxTimes.append(max(nd.age for nd in t))
 					self._fillRawRateData(t.seed_node, res)
 
 		res.selectedTree = self.treeId
@@ -149,9 +147,12 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 		ownedTrees = self.results.GetOwnedAttr('trees', lambda oah: oah.owner == self.source.value)
 		if len(ownedTrees) > 0:
 			self.trees = ownedTrees[0].GetValue()
-			mtKey = id(ownedTrees[0].owner)
-			if mtKey in self.maxTimes and self.treeId < len(self.trees):
-				self.selectedMaxTime = self.maxTimes[mtKey][self.treeId]
+
+			ownedMaxTimes = self.results.GetOwnedAttr('maxTimes', lambda oah: ownedTrees[0] in oah.sources)
+			if  len(ownedMaxTimes) > 0:
+				maxTimes = ownedMaxTimes[0].GetValue()
+				if self.treeId < len(maxTimes):
+					self.selectedMaxTime = maxTimes[self.treeId]
 
 			rawRates = self.results.GetOwnedAttr('rawRate', lambda oah: ownedTrees[0] in oah.sources)
 			if len(rawRates) > 0:

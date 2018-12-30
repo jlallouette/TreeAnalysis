@@ -5,6 +5,7 @@ from DashUtilities import *
 
 from TreeGenerators import *
 
+# Utility function for TreeStatSimulation
 def treeGenSimFunc(v):
 	endCond, treeGen = v
 	rej = 0
@@ -15,13 +16,11 @@ def treeGenSimFunc(v):
 		t = treeGen.generate(endCond)
 	return (t, rej)
 
+# Generates n trees
 class TreeStatSimulation(SimulationRunner, DashInterfacable):
 	def __init__(self):
 		SimulationRunner.__init__(self)
 		DashInterfacable.__init__(self)
-
-		self.rejected = None
-		self.total = None
 
 	def GetDefaultParams(self):
 		return ParametersDescr({
@@ -34,36 +33,29 @@ class TreeStatSimulation(SimulationRunner, DashInterfacable):
 		return ['trees']
 
 	def Simulate(self):
-
-		res = Results(self)
-		res.trees = []
-		self.rejected = 0
-		self.total = 0
+		self.results = Results(self)
+		self.results.trees = []
+		self.results.rejected = 0
+		self.results.total = 0
 		with Pool() as pool:
 			params = [(self.endCondition, self.treeGenerator)]*self.nb_tree
 			for t, rej in pool.imap_unordered(treeGenSimFunc, params):
-				res.trees.append(t)
-				self.rejected += rej
-				self.total += rej + 1
-
-#		for i in range(self.nb_tree):
-#			t = None
-#			while t is None or not self.endCondition.isFinished(t):
-#				if t is not None:
-#					self.rejected += 1
-#				t = self.treeGenerator.generate(self.endCondition)
-#				self.total += 1
-#			res.trees.append(t)
-		return res
+				self.results.trees.append(t)
+				self.results.rejected += rej
+				self.results.total += rej + 1
+		return self.results
 
 	def _getInnerLayout(self):
-		if self.total is not None and self.rejected is not None:
-			return html.P('rejected Trees: {}/{}'.format(self.rejected, self.total))
+		rejected = self.results.GetOwnedAttr('rejected', ind=0, defVal=None, filterFunc=lambda oah: oah.owner == self)
+		total = self.results.GetOwnedAttr('total', ind=0, defVal=None, filterFunc=lambda oah: oah.owner == self)
+		if total is not None and rejected is not None:
+			return html.P('rejected Trees: {}/{}'.format(rejected, total))
 		else:
 			return ''
 
 from dendropy import Tree
 import os
+# Loads a tree from a file
 class TreeLoaderSim(SimulationRunner, DashInterfacable):
 	def __init__(self):
 		SimulationRunner.__init__(self)

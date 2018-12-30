@@ -76,7 +76,7 @@ class DashInterfacable(Interfacable):
 		self._useData = []
 		self._dropDownData = []
 		self._customLayouts = {}
-		self._defaultLayout = DashVerticalLayout()
+		self._defaultLayout = DashVerticalLayout
 
 	def _getElemId(self, elemType, name):
 		return '{}_{}_{}'.format(id(self), elemType, name)
@@ -96,7 +96,7 @@ class DashInterfacable(Interfacable):
 		if name in self._customLayouts:
 			return self._customLayouts[name]
 		else:
-			return self._defaultLayout
+			return self._defaultLayout()
 	
 	# Call this method to set special layouts for sub elements
 	def _setCustomLayout(self, name, layout):
@@ -362,13 +362,20 @@ class DashInterfacable(Interfacable):
 
 # Abstract Base Class for dash layouts
 class DashLayout(ABC):
+	def __init__(self, id=None):
+		if id is None:
+			self.id = str(random.random())
+		else:
+			self.id = id
+
 	@abstractmethod
 	def GetLayout(self, elems, style={}):
 		pass
 
 # Horizontal layout
 class DashHorizontalLayout(DashLayout):
-	def __init__(self, widthFunc = lambda ind, tot:int(100/(tot+0.001))):
+	def __init__(self, widthFunc = lambda ind, tot:int(100/(tot+0.001)), id=None):
+		DashLayout.__init__(self, id=id)
 		self.widthFunc = widthFunc
 
 	def GetLayout(self, elems, style={}):
@@ -383,9 +390,12 @@ class DashHorizontalLayout(DashLayout):
 				e.style['vertical-align'] = 'top'
 				e.style['width'] = '{}%'.format(self.widthFunc(visInd, nbVisElems))
 				visInd += 1
-		return html.Div(elems, style=style) if len(style) > 0 else html.Div(elems)
+		return html.Div(elems, style=style, id=self.id) if len(style) > 0 else html.Div(elems, id=self.id)
 
 # Vertical layout
 class DashVerticalLayout(DashLayout):
+	def __init__(self, id=None):
+		DashLayout.__init__(self, id=id)
+
 	def GetLayout(self, elems, style={}):
-		return html.Div(elems, style=style) if len(style) > 0 else html.Div(elems)
+		return html.Div(elems, style=style, id=self.id) if len(style) > 0 else html.Div(elems, id=self.id)

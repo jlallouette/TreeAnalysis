@@ -3,6 +3,7 @@ import dash_html_components as html
 from dash.dependencies import Input, Output, State
 import dash
 import random
+import math
 
 from Utilities import *
 
@@ -68,7 +69,7 @@ class DashInterfacable(Interfacable):
 		Interfacable.__init__(self)
 
 		self.subAuthValsObj = {}
-		self._fullDivId = self._getElemId('special', 'all')
+		self._fullDivId = self._getElemId('special', 'fullDiv')
 		self._uselessDivIds = {name:self._getElemId('special', 'uselessDiv'+name) for name in ['use', 'all', 'anyParamChange']}
 
 		self._fillFieldData = True
@@ -76,7 +77,6 @@ class DashInterfacable(Interfacable):
 		self._useData = []
 		self._dropDownData = []
 		self._customLayouts = {}
-		self._defaultLayout = DashVerticalLayout
 
 	def _getElemId(self, elemType, name):
 		return '{}_{}_{}'.format(id(self), elemType, name)
@@ -92,14 +92,18 @@ class DashInterfacable(Interfacable):
 	def _buildInnerLayoutSignals(self, app):
 		return None
 
+	def _getDefaultLayout(self):
+		return DashVerticalLayout()
+
 	def _getCustomLayout(self, name):
-		if name in self._customLayouts:
-			return self._customLayouts[name]
-		else:
-			return self._defaultLayout()
+		if name not in self._customLayouts:
+			self._setCustomLayout(name, self._getDefaultLayout())
+		return self._customLayouts[name]
+
 	
 	# Call this method to set special layouts for sub elements
 	def _setCustomLayout(self, name, layout):
+		layout.id = self._getElemId('special', name)
 		self._customLayouts[name] = layout
 
 	def _getDropDownValName(self, av, cls, defaultTypes):
@@ -208,7 +212,7 @@ class DashInterfacable(Interfacable):
 		for ddd in self._dropDownData:
 			for key in ddd.allSavkKeys:
 				obj = self.subAuthValsObj[key]
-				outId = obj._getElemId('special', 'all')
+				outId = obj._fullDivId
 				app.callback(Output(outId, 'style'), [Input(ddd.id, ddd.fieldName)], [State(outId, 'style')])(self._generateDropDownCallback(obj))
 				anyChangeInputs.append(Input(outId, 'style'))
 
@@ -399,3 +403,22 @@ class DashVerticalLayout(DashLayout):
 
 	def GetLayout(self, elems, style={}):
 		return html.Div(elems, style=style, id=self.id) if len(style) > 0 else html.Div(elems, id=self.id)
+
+
+class DashGridLayout(DashVerticalLayout):
+	def __init__(self, columns = 2, id=None):
+		DashVerticalLayout.__init__(self, id=id)
+		self.columns = columns
+
+	def GetLayout(self, elems, style={}):
+		nbRows = math.ceil(len(elems) / self.columns)
+		rows = []
+		for i in range(nbRows):
+			row = []
+			for j in range(self.columns):
+				ind = i*self.columns + j
+				if ind < len(elems):
+					row.append(elems[ind])
+			rows.append(DashHorizontalLayout().GetLayout(row, style=style))
+		return DashVerticalLayout.GetLayout(self, rows, style=style)
+	

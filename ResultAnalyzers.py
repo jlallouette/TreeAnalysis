@@ -258,6 +258,8 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 				Input(self._getElemId('innerLayout', 'treeGraph'), 'figure')
 			])(self._getCladeSelectionCallback())
 
+from WComputations import *
+
 class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 	def __init__(self):
 		ResultAnalyzer.__init__(self)
@@ -265,6 +267,7 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 
 		self.selectedTree = None
 		self.selectedSource = None
+		self.treeVis = None
 
 	def DependsOn(self):
 		return [TreeStatSimulation]
@@ -286,12 +289,15 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 				trees = ownedTrees.GetValue()
 				self.results.colless_tree_imba = []
 				self.results.sackin_index = []
+				#self.results.W = []
 				for t in trees:
 					if len(t.leaf_nodes()) > 3:
 						self.results.colless_tree_imba.append(dendropy.calculate.treemeasure.colless_tree_imbalance(t))
 					else:
 						self.results.colless_tree_imba.append(None)
 					self.results.sackin_index.append(dendropy.calculate.treemeasure.sackin_index(t))
+
+					#self.results.W.append(computeW(t, t.seed_node))
 
 		return self.results
 	
@@ -302,51 +308,94 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 		if isinstance(source, TreeVisualizer):
 			self.selectedTree = source.treeId
 			self.selectedSource = source.source
+			self.treeVis = source
 
 	def _getInnerLayout(self):
 		opacity = 0.75
 
-		sciShapes = []
-		sciHist = []
-		for ownedSci in self.results.GetOwnedAttr('colless_tree_imba'):
-			with ownedSci:
-				sciHist.append(go.Histogram(x=ownedSci.GetValue(), opacity = opacity, name = ownedSci.GetFullSourceName(layersToPeel=1)))
-				if self.selectedTree is not None and self.selectedSource.value in ownedSci.GetAllSources():
-					xVal = ownedSci.GetValue()[self.selectedTree]
-					sciShapes.append(dict(x0=xVal, x1=xVal, y0=0, y1=1, yref='paper', type='line', line=dict(color='red',width=2)))
+		stats = [('colless_tree_imba', 'Colless Tree Imbalance'),
+				('sackin_index', 'Sackin Index')]#,
+				#('W', 'W stat')]
 
-		siShapes = []
-		siHist = []
-		for ownedSi in self.results.GetOwnedAttr('sackin_index'):
-			with ownedSi:
-				siHist.append(go.Histogram(x=ownedSi.GetValue(), opacity = opacity, name = ownedSi.GetFullSourceName(layersToPeel=1)))
-				if self.selectedTree is not None and self.selectedSource.value in ownedSi.GetAllSources():
-					xVal = ownedSi.GetValue()[self.selectedTree]
-					siShapes.append(dict(x0=xVal, x1=xVal, y0=0, y1=1, yref='paper', type='line', line=dict(color='red',width=2)))
+		allFigures = []
 
-		allHists = [
-			dcc.Graph(figure=dict(
-				data=sciHist, 
-				layout=go.Layout(
-					xaxis=dict(title='Colless Tree Imbalance'), 
-					yaxis=dict(title='Count'), 
-					margin=dict(l=40,b=30,t=10,r=0), 
-					hovermode='closest', 
-					barmode='overlay',
-					shapes=sciShapes)
-				)
-			),
-			dcc.Graph(figure=dict(
-				data=siHist, 
-				layout=go.Layout(
-					xaxis=dict(title='Sackin Index'), 
-					yaxis=dict(title='Count'), 
-					margin=dict(l=40,b=30,t=10,r=0), 
-					hovermode='closest', 
-					barmode='overlay',
-					shapes=siShapes)
+		for key, name in stats:
+			data = []
+			shapes = []
+			for owned in self.results.GetOwnedAttr(key):
+				with owned:
+					data.append(go.Histogram(x=owned.GetValue(), opacity = opacity, name = owned.GetFullSourceName(layersToPeel=1)))
+					if self.selectedTree is not None and self.selectedSource.value in owned.GetAllSources():
+						xVal = owned.GetValue()[self.selectedTree]
+						shapes.append(dict(x0=xVal, x1=xVal, y0=0, y1=1, yref='paper', type='line', line=dict(color='red',width=2)))
+
+			allFigures.append(
+				dcc.Graph(figure=dict(
+					data=data, 
+					layout=go.Layout(
+						xaxis=dict(title=name), 
+						yaxis=dict(title='Count'), 
+						margin=dict(l=40,b=30,t=10,r=0), 
+						hovermode='closest', 
+						barmode='overlay',
+						legend=dict(x=0.05,y=0.95),
+						shapes=shapes)
+					)
 				)
 			)
-		]
-		return DashHorizontalLayout().GetLayout(allHists)
+
+		for i, v in enumerate(stats):
+			key1, name1 = v
+			for j, v2 in enumerate(stats):
+				key2, name2 = v2
+				if j > i:
+					data = []
+					shapes = []
+					for owned1 in self.results.GetOwnedAttr(key1):
+						for owned2 in self.results.GetOwnedAttr(key2):
+							if owned1.HasSameSourcesAs(owned2):
+								xVals = owned2.GetValue()
+								yVals = owned1.GetValue()
+								data.append(go.Scatter(x=xVals, y=yVals, mode='markers', name = owned1.GetFullSourceName(layersToPeel=1), showlegend=False))
+								if self.selectedTree is not None and self.selectedSource.value in owned1.GetAllSources():
+									xVal = xVals[self.selectedTree]
+									yVal = yVals[self.selectedTree]
+									rat = 0.02
+									xr = rat*(max(xVals)-min(xVals))
+									yr = rat*(max(yVals)-min(yVals))
+									shapes.append(dict(x0=xVal-xr, x1=xVal+xr, y0=yVal-yr, y1=yVal+yr, type='circle', line=dict(color='red',width=2)))
+					
+					allFigures.append(
+						dcc.Graph(figure=dict(
+							data=data, 
+							layout=go.Layout(
+								xaxis=dict(title=name2), 
+								yaxis=dict(title=name1), 
+								margin=dict(l=40,b=30,t=10,r=0), 
+								hovermode='closest', 
+								barmode='overlay',
+								shapes=shapes)
+							)
+						)
+					)
+				else:
+					allFigures.append(html.Div())
+
+		return DashGridLayout(columns = len(stats)).GetLayout(allFigures, style={'border-style':'solid', 'border-width':'1px', 'background-color':'rgb(200,200,200)'})
+
+	#def _buildInnerLayoutSignals(self, app):
+	# TODO Modify depend callback system to be able to give the output elem that needs to be updated
+	#	# TODO
+	#	app.callback(
+	#		Output(self._getElemId('innerLayout', 'treeGraph'), 'figure'), 
+	#		[
+	#			Input(self._uselessDivIds['anyParamChange'], 'children'),
+	#			Input(self._getElemId('innerLayout', 'treeGraph'), 'clickData')
+	#		])(self._getTreeGraphCallback())
+	#	app.callback(
+	#		Output(self._getElemId('innerLayout', 'avgRateGraph'), 'figure'),
+	#		[
+	#			Input(self._getElemId('innerLayout', 'treeGraph'), 'clickData'), 
+	#			Input(self._getElemId('innerLayout', 'treeGraph'), 'figure')
+	#		])(self._getCladeSelectionCallback())
 

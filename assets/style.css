@@ -26,6 +26,10 @@
 	margin:1px;
 }
 
+.Select {
+	min-width: 200px;
+}
+
 /* PLotly.js 
 –––––––––––––––––––––––––––––––––––––––––––––––––– */
 /* plotly.js's modebar's z-index is 1001 by default

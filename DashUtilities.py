@@ -3,6 +3,7 @@ import dash_html_components as html
 from dash.dependencies import Input, Output, State
 import dash
 import random
+import math
 
 from Utilities import *
 
@@ -68,7 +69,7 @@ class DashInterfacable(Interfacable):
 		Interfacable.__init__(self)
 
 		self.subAuthValsObj = {}
-		self._fullDivId = self._getElemId('special', 'all')
+		self._fullDivId = self._getElemId('special', 'fullDiv')
 		self._uselessDivIds = {name:self._getElemId('special', 'uselessDiv'+name) for name in ['use', 'all', 'anyParamChange']}
 
 		self._fillFieldData = True
@@ -76,7 +77,6 @@ class DashInterfacable(Interfacable):
 		self._useData = []
 		self._dropDownData = []
 		self._customLayouts = {}
-		self._defaultLayout = DashVerticalLayout()
 
 	def _getElemId(self, elemType, name):
 		return '{}_{}_{}'.format(id(self), elemType, name)
@@ -92,14 +92,18 @@ class DashInterfacable(Interfacable):
 	def _buildInnerLayoutSignals(self, app):
 		return None
 
+	def _getDefaultLayout(self):
+		return DashVerticalLayout()
+
 	def _getCustomLayout(self, name):
-		if name in self._customLayouts:
-			return self._customLayouts[name]
-		else:
-			return self._defaultLayout
+		if name not in self._customLayouts:
+			self._setCustomLayout(name, self._getDefaultLayout())
+		return self._customLayouts[name]
+
 	
 	# Call this method to set special layouts for sub elements
 	def _setCustomLayout(self, name, layout):
+		layout.id = self._getElemId('special', name)
 		self._customLayouts[name] = layout
 
 	def _getDropDownValName(self, av, cls, defaultTypes):
@@ -109,20 +113,26 @@ class DashInterfacable(Interfacable):
 	def _generateFieldCallback(self):
 		def UpdateValues(*values):
 			# First update all values
+			oneUpdt = False
 			for v, dfd in zip(values, self._fieldData):
 				if dfd.subKey is None:
 					oldVal = getattr(dfd.obj, dfd.attrName)
 					if isinstance(oldVal, Parameterizable):
 						savk = self._getSubAuthValKey(dfd.attrName, v)
-						setattr(dfd.obj, dfd.attrName, self.subAuthValsObj[savk])
+						if oldVal != self.subAuthValsObj[savk]:
+							setattr(dfd.obj, dfd.attrName, self.subAuthValsObj[savk])
+							oneUpdt = True
 					else:
 						cls = type(oldVal)
 						try:
 							# First try to build it from cls and value
-							setattr(dfd.obj, dfd.attrName, cls(v))
+							newVal = cls(v)
 						except:
 							# Otherwise, try by interpreting it
-							setattr(dfd.obj, dfd.attrName, eval(v))
+							newVal = eval(v)
+						if oldVal != newVal:
+							setattr(dfd.obj, dfd.attrName, newVal)
+							oneUpdt = True
 				else:
 					oldVal = getattr(dfd.obj, dfd.attrName)
 					if type(oldVal) == tuple:
@@ -141,7 +151,11 @@ class DashInterfacable(Interfacable):
 							oldVal[dfd.subKey] = cls(v)
 						except:
 							raise ValueError('Attribute {} of object {} cannot be updated with subkey {}.'.format(dfd.attrName, dfd.obj, dfd.subKey))
-					setattr(dfd.obj, dfd.attrName, oldVal)
+					if getattr(dfd.obj, dfd.attrName) != oldVal:
+						setattr(dfd.obj, dfd.attrName, oldVal)
+						oneUpdt = True
+			if not oneUpdt:
+				raise dash.exceptions.PreventUpdate
 			return random.random()
 		return UpdateValues
 
@@ -161,7 +175,16 @@ class DashInterfacable(Interfacable):
 
 	def _generateDropDownCallback(self, obj):
 		def UpdateDropDown(value, style):
-			style['display'] = 'block' if value == obj.__class__.__name__ else 'none'
+			if value == obj.__class__.__name__:
+				if style['display'] == 'none':
+					style['display'] = 'block'
+				else:
+					raise dash.exceptions.PreventUpdate
+			else:
+				if style['display'] != 'none':
+					style['display'] = 'none'
+				else:
+					raise dash.exceptions.PreventUpdate
 			return style
 		return UpdateDropDown
 
@@ -170,8 +193,8 @@ class DashInterfacable(Interfacable):
 			if any(val != '' for val in values):
 				return acc(values)
 			else:
-				raise dash.exceptions.PreventUpdate()
-				return ''
+				raise dash.exceptions.PreventUpdate
+			return ''
 		return AnyChangeCB
 
 	# Bind all signals
@@ -189,7 +212,7 @@ class DashInterfacable(Interfacable):
 		for ddd in self._dropDownData:
 			for key in ddd.allSavkKeys:
 				obj = self.subAuthValsObj[key]
-				outId = obj._getElemId('special', 'all')
+				outId = obj._fullDivId
 				app.callback(Output(outId, 'style'), [Input(ddd.id, ddd.fieldName)], [State(outId, 'style')])(self._generateDropDownCallback(obj))
 				anyChangeInputs.append(Input(outId, 'style'))
 
@@ -343,13 +366,20 @@ class DashInterfacable(Interfacable):
 
 # Abstract Base Class for dash layouts
 class DashLayout(ABC):
+	def __init__(self, id=None):
+		if id is None:
+			self.id = str(random.random())
+		else:
+			self.id = id
+
 	@abstractmethod
 	def GetLayout(self, elems, style={}):
 		pass
 
 # Horizontal layout
 class DashHorizontalLayout(DashLayout):
-	def __init__(self, widthFunc = lambda ind, tot:int(100/(tot+0.001))):
+	def __init__(self, widthFunc = lambda ind, tot:int(100/(tot+0.001)), id=None):
+		DashLayout.__init__(self, id=id)
 		self.widthFunc = widthFunc
 
 	def GetLayout(self, elems, style={}):
@@ -364,9 +394,31 @@ class DashHorizontalLayout(DashLayout):
 				e.style['vertical-align'] = 'top'
 				e.style['width'] = '{}%'.format(self.widthFunc(visInd, nbVisElems))
 				visInd += 1
-		return html.Div(elems, style=style) if len(style) > 0 else html.Div(elems)
+		return html.Div(elems, style=style, id=self.id) if len(style) > 0 else html.Div(elems, id=self.id)
 
 # Vertical layout
 class DashVerticalLayout(DashLayout):
+	def __init__(self, id=None):
+		DashLayout.__init__(self, id=id)
+
 	def GetLayout(self, elems, style={}):
-		return html.Div(elems, style=style) if len(style) > 0 else html.Div(elems)
+		return html.Div(elems, style=style, id=self.id) if len(style) > 0 else html.Div(elems, id=self.id)
+
+
+class DashGridLayout(DashVerticalLayout):
+	def __init__(self, columns = 2, id=None):
+		DashVerticalLayout.__init__(self, id=id)
+		self.columns = columns
+
+	def GetLayout(self, elems, style={}):
+		nbRows = math.ceil(len(elems) / self.columns)
+		rows = []
+		for i in range(nbRows):
+			row = []
+			for j in range(self.columns):
+				ind = i*self.columns + j
+				if ind < len(elems):
+					row.append(elems[ind])
+			rows.append(DashHorizontalLayout().GetLayout(row, style=style))
+		return DashVerticalLayout.GetLayout(self, rows, style=style)
+	

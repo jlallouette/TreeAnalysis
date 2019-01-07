@@ -372,6 +372,7 @@ class ExtantSizeRateFunc(NonNeutralRateFunction):
 
 	def updateValues(self):
 		self.actualFunc = eval(self.func)
+		self.lastNbExtant = 1
 
 	def getRate(self, node, time, extant_tips = set(), **kwargs):
 		self.lastNbExtant = len(extant_tips)
@@ -386,3 +387,58 @@ class ExtantSizeRateFunc(NonNeutralRateFunction):
 	def IsChangedOnSplitOrDeath(self):
 		return True
 
+class ImmunizationRateFunc(NonNeutralRateFunction):
+	def __init__(self):
+		NonNeutralRateFunction.__init__(self)
+		self.traitValname = 'traitVal' + str(id(self))
+		self.immunization = {}
+		self.lastTime = 0
+
+	def GetDefaultParams(self):
+		return ParametersDescr({
+			'immunizationRate' : (1.0,float),
+			'forgetRate' : (0.1,float),
+			'sliceSize' : (2.0, float)
+		})
+
+	def updateValues(self):
+		self.immunization = {}
+		self.lastTime = 0
+
+	def getRate(self, node, time, total_time = 0, extant_tips = set(), **kwargs):
+		distrib = {}
+
+		for nd in extant_tips:
+			if not hasattr(nd, self.traitValname):
+				if nd.parent_node is None:
+					setattr(nd, self.traitValname, 0)
+				else:
+					setattr(nd, self.traitValname, getattr(nd.parent_node, self.traitValname) + np.random.normal(0, 1))
+			val = round(getattr(nd, self.traitValname) / self.sliceSize)
+			if val not in distrib:
+				distrib[val] = 0
+			if val not in self.immunization:
+				self.immunization[val] = 0
+			distrib[val] += 1 #TODO Should we normalize here?
+
+		deltaT = total_time - self.lastTime
+		if deltaT > 0:
+			for val, rate in self.immunization.items():
+				if val not in distrib:
+					distrib[val] = 0
+				expVal = np.exp(-self.forgetRate*deltaT)
+				self.immunization[val] = max(0, rate*expVal + self.immunizationRate * distrib[val] * (1 - expVal) / self.forgetRate)
+			self.lastTime = total_time
+
+		val = round(getattr(node, self.traitValname) / self.sliceSize)
+		return self.immunization[val]
+
+	def getNextChange(self, node, time, extant_tips = set(), **kwargs):
+		# TODO for now, only update when an event happens
+		return math.inf
+
+	def getHighestPosisbleRate(self):
+		return self.immunizationRate / self.forgetRate
+
+	def IsChangedOnSplitOrDeath(self):
+		return True

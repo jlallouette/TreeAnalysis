@@ -54,7 +54,6 @@ class NamedObject(ABC):
 	def GetUniqueName(self):
 		return self.uniqueName
 		
-
 # Parameterizable abstract base class
 class Parameterizable(NamedObject):
 	def __init__(self, params = None):
@@ -83,6 +82,24 @@ class Parameterizable(NamedObject):
 
 	def GetDefaultParams(self):
 		return ParametersDescr()
+
+	def CopyParamsFrom(self, other):
+		for name, val in self.GetDefaultParams().description.items():
+			p = getattr(self, name)
+			if isinstance(p, Parameterizable):
+				otherp = getattr(other, name)
+				if isinstance(otherp, type(p)):
+					p.CopyParamsFrom(otherp)
+				# TODO isinstance would be bettre here but it creates a cyclical dependency with DashUtilities, TOFIX later.
+				elif 'DashInterfacable' in [cls.__name__ for cls in self.__class__.mro()]:
+					savk = self._getSubAuthValKey(name, type(otherp))
+					setattr(self, name, self.subAuthValsObj[savk])
+					getattr(self, name).CopyParamsFrom(otherp)
+				else:
+					raise NotImplementedError()
+			elif not isinstance(p, ReferenceHolder):
+				# TODO Maybe something to do about the specific reference holder being selected here
+				setattr(self, name, getattr(other, name))
 
 # Utility class for Usable
 class ClickableData:
@@ -303,4 +320,12 @@ class ReferenceHolder:
 
 	def __eq__(self, other):
 		return self.value == other.value
+
+# Abstract Base class for all object that hold a result object
+class ResultHolder:
+	def __init__(self):
+		self.results = Results(self)
+
+	def SetResults(self, res):
+		self.results = res
 

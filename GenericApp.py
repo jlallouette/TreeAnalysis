@@ -1,5 +1,6 @@
 from ResultAnalyzers import *
 from DashUtilities import *
+from GenericAppState import *
 
 class GenericApp(Parameterizable, Usable, DashInterfacable):
 	def __init__(self):
@@ -10,33 +11,62 @@ class GenericApp(Parameterizable, Usable, DashInterfacable):
 		self.simulations = []
 		self.analyzers = []
 		self.simManager = SimulationManager('{}_sims.pkl'.format(self.__class__.__name__))
+		self.results = None
+
+		self.stateSaver = GenericAppStateSaver(self)
+		self.stateLoader = GenericAppStateLoader(self)
 
 	def GetDefaultParams(self):
 		return ParametersDescr({
 			'memoize': (False, bool,)
 		})
 
+	def GetElemFromName(self, name):
+		for elem in self.simulations + self.analyzers:
+			if elem.GetUniqueName() == name:
+				return elem
+		return None
+
 	@Usable.Clickable('special', 'innerLayout', 'children')
 	def Analyze(self):
-		res = Results(self)
+		self.results = Results(self)
 		for sim in self.simulations:
-			print('before', res.GetOwnedAttr('trees'))
-			res.addResults(self.simManager.GetSimulationResult(sim, self.memoize))
-			print('after', res.GetOwnedAttr('trees'))
+			self.results.addResults(self.simManager.GetSimulationResult(sim, self.memoize))
 
 		for analyzer in self.analyzers:
-			res.addResults(analyzer.Analyze(res))
+			self.results.addResults(analyzer.Analyze(self.results))
 
 		return self._getInnerLayout()
-	
-	def _getInnerLayout(self):
+
+	def _getStateLayout(self):
+		# State Layout
 		simElems = [sim.GetLayout() for sim in self.simulations if isinstance(sim, DashInterfacable)]
 		raElems = [ra.GetLayout() for ra in self.analyzers if isinstance(ra, DashInterfacable)]
 		simLo = DashVerticalLayout().GetLayout(simElems, style={'vertical-align' :'top'})
 		raLo = DashVerticalLayout().GetLayout(raElems)
-		return DashHorizontalLayout(lambda ind, tot:25 if ind==0 else 75).GetLayout([simLo, raLo])
+		stateLayout = DashHorizontalLayout(lambda ind, tot:25 if ind==0 else 75, id=self._getElemId('layout', 'state')).GetLayout([simLo, raLo])
+		return stateLayout
 
+	def _getInnerLayout(self):
+		# Menu Layout
+		menuLayout = DashHorizontalLayout().GetLayout([self.stateSaver.GetLayout(), self.stateLoader.GetLayout()])
+		stateLayout = self._getStateLayout()
+		return DashVerticalLayout().GetLayout([stateLayout, menuLayout])
+
+	def _generateUpdateStateCallback(self):
+		def updateState(value):
+			return self._getStateLayout().children
+		return updateState
+	
 	def _buildInnerLayoutSignals(self, app):
+		# Build menu signals
+		self.stateSaver.BuildAllSignals(app)
+		self.stateLoader.BuildAllSignals(app)
+		app.callback(Output(self.stateLoader._getElemId('params', 'name'), 'options'), 
+			[Input(self.stateSaver._fullDivId, 'children')])(self.stateLoader._generateOptionsCallback())
+		app.callback(Output(self._getElemId('layout', 'state'), 'children'), 
+			[Input(self.stateLoader._fullDivId, 'children')])(self._generateUpdateStateCallback())
+		# Build state signals
 		for sim in self.simulations:
 			if isinstance(sim, DashInterfacable):
 				sim.BuildAllSignals(app)

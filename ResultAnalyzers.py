@@ -276,7 +276,7 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 		return ['trees']
 
 	def GetOutputs(self):
-		return ['colless_tree_imba', 'sackin_index']
+		return ['colless_tree_imba', 'sackin_index', 'clade_sizes']
 	
 	def Analyze(self, results):
 		self.results = Results(self)
@@ -290,6 +290,8 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 				self.results.colless_tree_imba = []
 				self.results.sackin_index = []
 				#self.results.W = []
+				self.results.clade_sizes = []
+
 				for t in trees:
 					if len(t.leaf_nodes()) > 3:
 						self.results.colless_tree_imba.append(dendropy.calculate.treemeasure.colless_tree_imbalance(t))
@@ -298,6 +300,13 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 					self.results.sackin_index.append(dendropy.calculate.treemeasure.sackin_index(t))
 
 					#self.results.W.append(computeW(t, t.seed_node))
+
+					# Clade size distribution
+					clade_sizes_t = [0]*(len(t.leaf_nodes())+1)
+					for n in t.nodes():
+						clade_sizes_t[len(n.leaf_nodes())] += 1
+					self.results.clade_sizes.append(clade_sizes_t)
+
 
 		return self.results
 	
@@ -311,13 +320,42 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 			self.treeVis = source
 
 	def _getInnerLayout(self):
-		opacity = 0.75
 
+		allFigures = []
+
+		stats_dist = [('clade_sizes', 'Clade Size Distribution')]
+		for key, name in stats_dist:
+			data = []
+			shapes = []
+			for owned in self.results.GetOwnedAttr(key):
+				with owned:
+					distributions = owned.GetValue()
+					opacity = 1.0/len(distributions)
+					show_legend = True
+					for d in distributions:
+						#data.append(go.Scatter(y=d, name=owned.GetFullSourceName(layersToPeel=1)))
+						data.append(go.Histogram(x=d, opacity=opacity, marker=dict(color='#FFD7E9'), showlegend=show_legend, name = owned.GetFullSourceName(layersToPeel=1)))
+						show_legend = False
+
+			allFigures.append(
+				dcc.Graph(figure=dict(
+					data=data, 
+					layout=go.Layout(
+						xaxis=dict(title=name), 
+						yaxis=dict(title='Count'), 
+						margin=dict(l=40,b=30,t=10,r=0), 
+						hovermode='closest', 
+						barmode='overlay',
+						legend=dict(x=0.05,y=0.95),
+						shapes=shapes)
+					)
+				)
+			)
+
+		opacity = 0.75
 		stats = [('colless_tree_imba', 'Colless Tree Imbalance'),
 				('sackin_index', 'Sackin Index')]#,
 				#('W', 'W stat')]
-
-		allFigures = []
 
 		for key, name in stats:
 			data = []

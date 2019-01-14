@@ -93,7 +93,7 @@ class TreePlotter(Parameterizable, Usable, DashInterfacable):
 		self.cladeSizeDist = tls.mpl_to_plotly(fig)
 		self.measuresDebug = cladeSizes 
 		# Distance between MRCA and root
-		 nbSetsPerPoint = 10
+		nbSetsPerPoint = 10
 
 
 

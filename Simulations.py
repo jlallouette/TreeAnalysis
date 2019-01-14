@@ -55,6 +55,7 @@ class TreeStatSimulation(SimulationRunner, DashInterfacable):
 
 from dendropy import Tree
 import os
+import random
 # Loads a tree from a file
 class TreeLoaderSim(SimulationRunner, DashInterfacable):
 	def __init__(self):
@@ -63,7 +64,8 @@ class TreeLoaderSim(SimulationRunner, DashInterfacable):
 
 	def GetDefaultParams(self):
 		return ParametersDescr({
-			'path' : ('data/apes.nwk', str)
+			'path' : ('data/apes.nwk', str),
+			'nbLeavesToSample' : (-1, int)
 		})
 
 	def GetOutputs(self):
@@ -77,5 +79,13 @@ class TreeLoaderSim(SimulationRunner, DashInterfacable):
 					res.trees = [Tree.get(file=f, schema='newick', tree_offset=0)]
 			except:
 				pass
+		if self.nbLeavesToSample > -1:
+			res.trees = [self.sampleFromTree(res.trees[0])]
 		return res
+
+	def sampleFromTree(self, tree):
+		allLeaves = tree.leaf_nodes()
+		sampledLeaves = random.sample(allLeaves, self.nbLeavesToSample)
+		tree.filter_leaf_nodes(lambda n: n in sampledLeaves)
+		return tree
 

@@ -442,3 +442,60 @@ class ImmunizationRateFunc(NonNeutralRateFunction):
 
 	def IsChangedOnSplitOrDeath(self):
 		return True
+
+
+class SortRateFunc(NonNeutralRateFunction):
+
+	def __init__(self):
+		NonNeutralRateFunction.__init__(self)
+		self.actualFunc = lambda x:x
+	
+	def GetDefaultParams(self):
+		return ParametersDescr({
+			'maxRate' : (1.0,float),
+			'minRate' : (0.01,float),
+			#'sortFunc' : ('lambda r:0.9**(r)',)
+			'sortFunc' : ('lambda r:math.exp(-r)',)
+		})
+
+	def updateValues(self):
+		self.actualFunc = eval(self.sortFunc)
+
+	def getRate(self, node, time, total_time = 0, extant_tips = set(), **kwargs):
+		
+		# Sort nodes from the most recent to the oldest
+		sortedNodes = sorted(extant_tips, key=lambda x: x.edge_length)
+
+		# Find rank of the current node
+		rankNode = sortedNodes.index(node)
+
+		# Compute value directly without taking into account min and max rates
+		rateNode = self.actualFunc(rankNode)
+
+		# Re-scale according to min and max rates
+		x_beg = self.actualFunc(0)
+		x_end = self.actualFunc(len(sortedNodes)-1)
+		y_beg = self.minRate
+		y_end = self.maxRate
+		if x_beg > x_end:
+			y_beg = self.maxRate
+			y_end = self.minRate
+
+		if len(sortedNodes) > 1:
+			a = (y_beg-y_end)/(x_beg-x_end)
+			b = y_beg -a*x_beg
+			rateNode = a*rateNode + b
+		else:
+			rateNode = y_beg
+			
+		return rateNode
+
+	def getNextChange(self, node, time, total_time = 0, **kwargs):
+		# Only update when an event happens
+		return math.inf
+
+	def getHighestPosisbleRate(self):
+		return self.maxRate
+
+	def IsChangedOnSplitOrDeath(self):
+		return True

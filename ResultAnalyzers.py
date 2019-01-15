@@ -312,12 +312,11 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 					clade_sizes_y_norm = []
 					clade_sizes_text   = []
 					# Re-scale x-axis btw 0 and 1
-					a = 1.0 / (float(nb_leaves_t) - 1)
-					b = 1.0 - float(nb_leaves_t)*a					
+					a = 1 / nb_leaves_t
 					#clade_sizes_binsize = 1.0/nb_leaves_t
 					clade_sizes_binsize = a
 					for i, clade_size_i in enumerate(clade_sizes_t):
-						x_norm = a*i + b
+						x_norm = a*i
 						#clade_sizes_x_norm.append(i/float(nb_leaves_t))
 						clade_sizes_x_norm.append(x_norm)
 						clade_sizes_y_norm.append(clade_size_i/float(nb_leaves_t))
@@ -335,7 +334,7 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 					branch_lenghts_t = [n.edge_length for n in t.nodes()]
 					blen_min     = min(branch_lenghts_t)
 					blen_max     = max(branch_lenghts_t)
-					blen_nb_bins = 20 
+					blen_nb_bins = 20 # TODO: Adjust number of bins according to the size of the trees (more resolution to bigger trees)
 					blen_binsize = (blen_max - blen_min + 1) / float(blen_nb_bins)
 					branch_lenghts_t = [0]*(blen_nb_bins)
 					for n in t.nodes():
@@ -350,7 +349,11 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 						blen_x_norm.append(i)
 						blen_y_norm.append(branch_lenghts_i/float(blen_max_y))
 						blen_text.append("Branch length: [" + '{0:.3g}'.format(i*blen_binsize) + "," + '{0:.3g}'.format((i+1)*blen_binsize) + "); Amount: " + str(branch_lenghts_i))
-					self.results.branch_lenghts.append((blen_x_norm, blen_y_norm, blen_text, 0.5))
+					self.results.branch_lenghts.append((blen_x_norm, blen_y_norm, blen_text, 1))
+
+					# Distance between MRCA and root
+					#nb
+
 						
 		return self.results
 	
@@ -378,29 +381,26 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 			# Warning: Improvised solution to mimic colors from Dash. As soon as they change the colors, the colors here will mismatch again.
 			colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'] * (int(len(self.results.GetOwnedAttr(key))/10.0)+10)
 			#colors = ['hsl('+str(h)+',50%'+',50%)' for h in np.linspace(0, 360, len(self.results.GetOwnedAttr(key))+1)]
-			max_dist_x = 0
+			max_dist_x = -math.inf
+			min_dist_x = math.inf
 			for idx, owned in enumerate(self.results.GetOwnedAttr(key)):
 				with owned:
 					distributions = owned.GetValue()
-					partial_opacity = (1.0/len(distributions))*opacity if len(distributions) > 0 else opacity
+					partial_opacity = max(0.05, (1.0/len(distributions))*opacity if len(distributions) > 0 else opacity)
 					legendName = owned.GetFullSourceName(layersToPeel=1)
 					# Warning: Improvised solution to have the caption displaying a proper color
 					data.append(dict(x=[1], y=[0], type='scatter', opacity=opacity, marker=dict(color=colors[idx]), hoverinfo='none', showlegend=True, legendgroup=legendName, name = legendName))
-					dist_i   = 0
-					max_dist = math.inf
-					print(len(distributions))
 					for dist_x, dist_y, dist_text, dist_binsize in distributions:
-						if dist_i < max_dist:
-							max_dist_x = max(max(dist_x) +(dist_x[1]-dist_x[0])/2,max_dist_x)
-							data.append(go.Histogram(histfunc = "sum", x=dist_x, y=dist_y, text=dist_text, opacity=partial_opacity, marker=dict(color=colors[idx]), xbins=dict(size=dist_binsize), showlegend=False, legendgroup=legendName, name = legendName))	
-							#data.append(go.Histogram(x=d, opacity=partial_opacity, marker=dict(color=colors[idx]), xbins=dict(size=0.5), showlegend=False, legendgroup=legendName, name = legendName))
-							dist_i += 1 # On purpose: when it's test mode, I change to +=
+						filt = [x for x,y in zip(dist_x, dist_y) if y > 0]
+						max_dist_x = max(max(filt)+dist_binsize/2,max_dist_x)
+						min_dist_x = min(min(filt)-dist_binsize/2,min_dist_x)
+						data.append(go.Histogram(histfunc = "sum", x=dist_x, y=dist_y, text=dist_text, opacity=partial_opacity, marker=dict(color=colors[idx]), xbins=dict(size=dist_binsize), showlegend=False, legendgroup=legendName, name = legendName))	
 
 			allFigures.append(
 				dcc.Graph(figure=dict(
 					data=data, 
 					layout=go.Layout(
-						xaxis=dict(title=name, range=(0, max_dist_x)),
+						xaxis=dict(title=name, range=(min_dist_x, max_dist_x)),
 						yaxis=dict(title='Count'), 
 						margin=dict(l=40,b=30,t=10,r=0), 
 						hovermode='closest', 

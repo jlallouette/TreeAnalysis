@@ -350,7 +350,7 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 						blen_x_norm.append(i)
 						blen_y_norm.append(branch_lenghts_i/float(blen_max_y))
 						blen_text.append("Branch length: [" + '{0:.3g}'.format(i*blen_binsize) + "," + '{0:.3g}'.format((i+1)*blen_binsize) + "); Amount: " + str(branch_lenghts_i))
-						self.results.branch_lenghts.append((blen_x_norm, blen_y_norm, blen_text, 0.5))
+					self.results.branch_lenghts.append((blen_x_norm, blen_y_norm, blen_text, 0.5))
 						
 		return self.results
 	
@@ -387,19 +387,20 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 					# Warning: Improvised solution to have the caption displaying a proper color
 					data.append(dict(x=[1], y=[0], type='scatter', opacity=opacity, marker=dict(color=colors[idx]), hoverinfo='none', showlegend=True, legendgroup=legendName, name = legendName))
 					dist_i   = 0
-					max_dist = 10
+					max_dist = math.inf
+					print(len(distributions))
 					for dist_x, dist_y, dist_text, dist_binsize in distributions:
 						if dist_i < max_dist:
-							max_dist_x = max(max(dist_x),max_dist_x)
+							max_dist_x = max(max(dist_x) +(dist_x[1]-dist_x[0])/2,max_dist_x)
 							data.append(go.Histogram(histfunc = "sum", x=dist_x, y=dist_y, text=dist_text, opacity=partial_opacity, marker=dict(color=colors[idx]), xbins=dict(size=dist_binsize), showlegend=False, legendgroup=legendName, name = legendName))	
 							#data.append(go.Histogram(x=d, opacity=partial_opacity, marker=dict(color=colors[idx]), xbins=dict(size=0.5), showlegend=False, legendgroup=legendName, name = legendName))
-							dist_i -= 1 # On purpose: when it's test mode, I change to +=
+							dist_i += 1 # On purpose: when it's test mode, I change to +=
 
 			allFigures.append(
 				dcc.Graph(figure=dict(
 					data=data, 
 					layout=go.Layout(
-						xaxis=dict(title=name), #,range=(0, max_dist_x) 
+						xaxis=dict(title=name, range=(0, max_dist_x)),
 						yaxis=dict(title='Count'), 
 						margin=dict(l=40,b=30,t=10,r=0), 
 						hovermode='closest', 

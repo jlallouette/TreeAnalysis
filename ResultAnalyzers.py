@@ -276,7 +276,7 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 		return ['trees']
 
 	def GetOutputs(self):
-		return ['colless_tree_imba', 'sackin_index', 'clade_sizes']
+		return ['colless_tree_imba', 'sackin_index', 'clade_sizes', 'branch_lenghts']
 	
 	def Analyze(self, results):
 		self.results = Results(self)
@@ -291,6 +291,7 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 				self.results.sackin_index = []
 				#self.results.W = []
 				self.results.clade_sizes = []
+				self.results.branch_lenghts = []
 
 				for t in trees:
 					nb_leaves_t = len(t.leaf_nodes())
@@ -330,7 +331,27 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 					#	clade_sizes_t.append(len(n.leaf_nodes()))
 					#self.results.clade_sizes.append(clade_sizes_t)
 
-
+					# Branch lenght distribution
+					branch_lenghts_t = [n.edge_length for n in t.nodes()]
+					blen_min     = min(branch_lenghts_t)
+					blen_max     = max(branch_lenghts_t)
+					blen_nb_bins = 10 
+					blen_binsize = (blen_max - blen_min + 1) / float(blen_nb_bins)
+					branch_lenghts_t = [0]*(blen_nb_bins)
+					for n in t.nodes():
+						idx_n = int(n.edge_length / blen_binsize)
+						branch_lenghts_t[idx_n] += 1
+					# Compute additional information for branch lenght distribution
+					blen_max_y  = len(t.nodes())
+					blen_x_norm = []
+					blen_y_norm = []
+					blen_text   = []
+					for i, branch_lenghts_i in enumerate(branch_lenghts_t):
+						blen_x_norm.append(i)
+						blen_y_norm.append(branch_lenghts_i/float(blen_max_y))
+						blen_text.append("Branch length: [" + '{0:.3g}'.format(i*blen_binsize) + "," + '{0:.3g}'.format((i+1)*blen_binsize) + "); Amount: " + str(branch_lenghts_i))
+						self.results.branch_lenghts.append((blen_x_norm, blen_y_norm, blen_text, 0.5))
+						
 		return self.results
 	
 	def DefaultUpdateOnModif(self):
@@ -347,7 +368,8 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 		allFigures = []
 		opacity = 0.75
 
-		stats_dist = [('clade_sizes', 'Clade Size Distribution')]
+		stats_dist = [('clade_sizes', 'Clade Size Distribution'),
+					('branch_lenghts', 'Branch Length Distribution')]
 
 		for key, name in stats_dist:
 			data = []
@@ -363,10 +385,14 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 					legendName = owned.GetFullSourceName(layersToPeel=1)
 					# Warning: Improvised solution to have the caption displaying a proper color
 					data.append(dict(x=[1], y=[0], type='scatter', opacity=opacity, marker=dict(color=colors[idx]), hoverinfo='none', showlegend=True, legendgroup=legendName, name = legendName))
+					dist_i   = 0
+					max_dist = 10 
 					for dist_x, dist_y, dist_text, dist_binsize in distributions:
-						data.append(go.Histogram(histfunc = "sum", x=dist_x, y=dist_y, text=dist_text, opacity=partial_opacity, marker=dict(color=colors[idx]), xbins=dict(size=dist_binsize), showlegend=False, legendgroup=legendName, name = legendName))	
-						#data.append(go.Histogram(x=d, opacity=partial_opacity, marker=dict(color=colors[idx]), xbins=dict(size=0.5), showlegend=False, legendgroup=legendName, name = legendName))
-			
+						if dist_i < max_dist:
+							data.append(go.Histogram(histfunc = "sum", x=dist_x, y=dist_y, text=dist_text, opacity=partial_opacity, marker=dict(color=colors[idx]), xbins=dict(size=dist_binsize), showlegend=False, legendgroup=legendName, name = legendName))	
+							#data.append(go.Histogram(x=d, opacity=partial_opacity, marker=dict(color=colors[idx]), xbins=dict(size=0.5), showlegend=False, legendgroup=legendName, name = legendName))
+							dist_i -= 1 # On purpose: when it's test mode, I change to +=
+
 			allFigures.append(
 				dcc.Graph(figure=dict(
 					data=data, 

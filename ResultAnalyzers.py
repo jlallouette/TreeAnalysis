@@ -276,7 +276,7 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 		return ['trees']
 
 	def GetOutputs(self):
-		return ['colless_tree_imba', 'sackin_index', 'clade_sizes']
+		return ['colless_tree_imba', 'sackin_index', 'clade_sizes', 'branch_lenghts']
 	
 	def Analyze(self, results):
 		self.results = Results(self)
@@ -291,9 +291,11 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 				self.results.sackin_index = []
 				#self.results.W = []
 				self.results.clade_sizes = []
+				self.results.branch_lenghts = []
 
 				for t in trees:
-					if len(t.leaf_nodes()) > 3:
+					nb_leaves_t = len(t.leaf_nodes())
+					if nb_leaves_t > 3:
 						self.results.colless_tree_imba.append(dendropy.calculate.treemeasure.colless_tree_imbalance(t))
 					else:
 						self.results.colless_tree_imba.append(None)
@@ -302,12 +304,54 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 					#self.results.W.append(computeW(t, t.seed_node))
 
 					# Clade size distribution
-					clade_sizes_t = [0]*(len(t.leaf_nodes())+1)
+					clade_sizes_t = [0]*(nb_leaves_t+1)
 					for n in t.nodes():
 						clade_sizes_t[len(n.leaf_nodes())] += 1
-					self.results.clade_sizes.append(clade_sizes_t)
+					# Compute additional information for clade size distribution (caption and normalization)
+					clade_sizes_x_norm = []
+					clade_sizes_y_norm = []
+					clade_sizes_text   = []
+					# Re-scale x-axis btw 0 and 1
+					a = 1.0 / (float(nb_leaves_t) - 1)
+					b = 1.0 - float(nb_leaves_t)*a					
+					#clade_sizes_binsize = 1.0/nb_leaves_t
+					clade_sizes_binsize = a
+					for i, clade_size_i in enumerate(clade_sizes_t):
+						x_norm = a*i + b
+						#clade_sizes_x_norm.append(i/float(nb_leaves_t))
+						clade_sizes_x_norm.append(x_norm)
+						clade_sizes_y_norm.append(clade_size_i/float(nb_leaves_t))
+						clade_sizes_text.append("Clade Size: " + str(i) + "; Amount: " + str(clade_size_i) + "; " + str(i/float(nb_leaves_t)))
+					# Warning: Without this, Plotly attributes the captions incorrectly. Why? It's a Christmas mystery!	
+					del(clade_sizes_text[0])
+					self.results.clade_sizes.append((clade_sizes_x_norm, clade_sizes_y_norm, clade_sizes_text, clade_sizes_binsize))
+					
+					#clade_sizes_t=[]
+					#for n in t.nodes():
+					#	clade_sizes_t.append(len(n.leaf_nodes()))
+					#self.results.clade_sizes.append(clade_sizes_t)
 
-
+					# Branch lenght distribution
+					branch_lenghts_t = [n.edge_length for n in t.nodes()]
+					blen_min     = min(branch_lenghts_t)
+					blen_max     = max(branch_lenghts_t)
+					blen_nb_bins = 20 
+					blen_binsize = (blen_max - blen_min + 1) / float(blen_nb_bins)
+					branch_lenghts_t = [0]*(blen_nb_bins)
+					for n in t.nodes():
+						idx_n = int(n.edge_length / blen_binsize)
+						branch_lenghts_t[idx_n] += 1
+					# Compute additional information for branch lenght distribution
+					blen_max_y  = len(t.nodes())
+					blen_x_norm = []
+					blen_y_norm = []
+					blen_text   = []
+					for i, branch_lenghts_i in enumerate(branch_lenghts_t):
+						blen_x_norm.append(i)
+						blen_y_norm.append(branch_lenghts_i/float(blen_max_y))
+						blen_text.append("Branch length: [" + '{0:.3g}'.format(i*blen_binsize) + "," + '{0:.3g}'.format((i+1)*blen_binsize) + "); Amount: " + str(branch_lenghts_i))
+						self.results.branch_lenghts.append((blen_x_norm, blen_y_norm, blen_text, 0.5))
+						
 		return self.results
 	
 	def DefaultUpdateOnModif(self):
@@ -322,28 +366,40 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 	def _getInnerLayout(self):
 
 		allFigures = []
+		opacity = 0.75
 
-		stats_dist = [('clade_sizes', 'Clade Size Distribution')]
+		stats_dist = [('clade_sizes', 'Clade Size Distribution'),
+					('branch_lenghts', 'Branch Length Distribution')]
+
 		for key, name in stats_dist:
 			data = []
 			shapes = []
-			for owned in self.results.GetOwnedAttr(key):
+			
+			# Warning: Improvised solution to mimic colors from Dash. As soon as they change the colors, the colors here will mismatch again.
+			colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'] * (int(len(self.results.GetOwnedAttr(key))/10.0)+10)
+			#colors = ['hsl('+str(h)+',50%'+',50%)' for h in np.linspace(0, 360, len(self.results.GetOwnedAttr(key))+1)]
+			max_dist_x = 0
+			for idx, owned in enumerate(self.results.GetOwnedAttr(key)):
 				with owned:
 					distributions = owned.GetValue()
-					opacity = 1.0/len(distributions)
+					partial_opacity = (1.0/len(distributions))*opacity if len(distributions) > 0 else opacity
 					legendName = owned.GetFullSourceName(layersToPeel=1)
-					show_legend = True
-					for d in distributions:
-						#data.append(go.Scatter(y=d, name=owned.GetFullSourceName(layersToPeel=1)))
-						#data.append(go.Histogram(x=d, opacity=opacity, marker=dict(color='#FFD7E9'), showlegend=show_legend, name = owned.GetFullSourceName(layersToPeel=1)))
-						data.append(go.Histogram(x=d, opacity=opacity, marker=dict(color='#FFD7E9'), showlegend=show_legend, legendgroup=legendName, name = legendName))
-						show_legend = False
+					# Warning: Improvised solution to have the caption displaying a proper color
+					data.append(dict(x=[1], y=[0], type='scatter', opacity=opacity, marker=dict(color=colors[idx]), hoverinfo='none', showlegend=True, legendgroup=legendName, name = legendName))
+					dist_i   = 0
+					max_dist = 10
+					for dist_x, dist_y, dist_text, dist_binsize in distributions:
+						if dist_i < max_dist:
+							max_dist_x = max(max(dist_x),max_dist_x)
+							data.append(go.Histogram(histfunc = "sum", x=dist_x, y=dist_y, text=dist_text, opacity=partial_opacity, marker=dict(color=colors[idx]), xbins=dict(size=dist_binsize), showlegend=False, legendgroup=legendName, name = legendName))	
+							#data.append(go.Histogram(x=d, opacity=partial_opacity, marker=dict(color=colors[idx]), xbins=dict(size=0.5), showlegend=False, legendgroup=legendName, name = legendName))
+							dist_i -= 1 # On purpose: when it's test mode, I change to +=
 
 			allFigures.append(
 				dcc.Graph(figure=dict(
 					data=data, 
 					layout=go.Layout(
-						xaxis=dict(title=name), 
+						xaxis=dict(title=name), #,range=(0, max_dist_x) 
 						yaxis=dict(title='Count'), 
 						margin=dict(l=40,b=30,t=10,r=0), 
 						hovermode='closest', 
@@ -354,7 +410,6 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 				)
 			)
 
-		opacity = 0.75
 		stats = [('colless_tree_imba', 'Colless Tree Imbalance'),
 				('sackin_index', 'Sackin Index')]#,
 				#('W', 'W stat')]

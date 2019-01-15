@@ -335,7 +335,7 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 					branch_lenghts_t = [n.edge_length for n in t.nodes()]
 					blen_min     = min(branch_lenghts_t)
 					blen_max     = max(branch_lenghts_t)
-					blen_nb_bins = 20 
+					blen_nb_bins = 20 # TODO: Adjust number of bins according to the size of the trees (more resolution to bigger trees)
 					blen_binsize = (blen_max - blen_min + 1) / float(blen_nb_bins)
 					branch_lenghts_t = [0]*(blen_nb_bins)
 					for n in t.nodes():
@@ -350,7 +350,11 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 						blen_x_norm.append(i)
 						blen_y_norm.append(branch_lenghts_i/float(blen_max_y))
 						blen_text.append("Branch length: [" + '{0:.3g}'.format(i*blen_binsize) + "," + '{0:.3g}'.format((i+1)*blen_binsize) + "); Amount: " + str(branch_lenghts_i))
-						self.results.branch_lenghts.append((blen_x_norm, blen_y_norm, blen_text, 0.5))
+					self.results.branch_lenghts.append((blen_x_norm, blen_y_norm, blen_text, 0.5))
+
+					# Distance between MRCA and root
+					#nb
+
 						
 		return self.results
 	
@@ -386,8 +390,8 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 					legendName = owned.GetFullSourceName(layersToPeel=1)
 					# Warning: Improvised solution to have the caption displaying a proper color
 					data.append(dict(x=[1], y=[0], type='scatter', opacity=opacity, marker=dict(color=colors[idx]), hoverinfo='none', showlegend=True, legendgroup=legendName, name = legendName))
-					dist_i   = 0
-					max_dist = 10
+					dist_i   = 0  # For debug purposes
+					max_dist = 10 # For debug purposes
 					for dist_x, dist_y, dist_text, dist_binsize in distributions:
 						if dist_i < max_dist:
 							max_dist_x = max(max(dist_x),max_dist_x)

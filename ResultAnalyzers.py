@@ -331,10 +331,12 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 				with owned:
 					distributions = owned.GetValue()
 					opacity = 1.0/len(distributions)
+					legendName = owned.GetFullSourceName(layersToPeel=1)
 					show_legend = True
 					for d in distributions:
 						#data.append(go.Scatter(y=d, name=owned.GetFullSourceName(layersToPeel=1)))
-						data.append(go.Histogram(x=d, opacity=opacity, marker=dict(color='#FFD7E9'), showlegend=show_legend, name = owned.GetFullSourceName(layersToPeel=1)))
+						#data.append(go.Histogram(x=d, opacity=opacity, marker=dict(color='#FFD7E9'), showlegend=show_legend, name = owned.GetFullSourceName(layersToPeel=1)))
+						data.append(go.Histogram(x=d, opacity=opacity, marker=dict(color='#FFD7E9'), showlegend=show_legend, legendgroup=legendName, name = legendName))
 						show_legend = False
 
 			allFigures.append(

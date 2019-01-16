@@ -259,6 +259,7 @@ class TreeVisualizer(ResultAnalyzer, DashInterfacable):
 			])(self._getCladeSelectionCallback())
 
 from WComputations import *
+from plotly.colors import DEFAULT_PLOTLY_COLORS
 
 class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 	def __init__(self):
@@ -378,8 +379,6 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 			data = []
 			shapes = []
 			
-			# Warning: Improvised solution to mimic colors from Dash. As soon as they change the colors, the colors here will mismatch again.
-			colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'] * (int(len(self.results.GetOwnedAttr(key))/10.0)+10)
 			#colors = ['hsl('+str(h)+',50%'+',50%)' for h in np.linspace(0, 360, len(self.results.GetOwnedAttr(key))+1)]
 			max_dist_x = -math.inf
 			min_dist_x = math.inf
@@ -389,12 +388,12 @@ class TreeStatAnalyzer(ResultAnalyzer, DashInterfacable):
 					partial_opacity = max(0.05, (1.0/len(distributions))*opacity if len(distributions) > 0 else opacity)
 					legendName = owned.GetFullSourceName(layersToPeel=1)
 					# Warning: Improvised solution to have the caption displaying a proper color
-					data.append(dict(x=[1], y=[0], type='scatter', opacity=opacity, marker=dict(color=colors[idx]), hoverinfo='none', showlegend=True, legendgroup=legendName, name = legendName))
+					data.append(dict(x=[1], y=[0], type='scatter', opacity=opacity, marker=dict(color=DEFAULT_PLOTLY_COLORS[idx%10]), hoverinfo='none', showlegend=True, legendgroup=legendName, name = legendName))
 					for dist_x, dist_y, dist_text, dist_binsize in distributions:
 						filt = [x for x,y in zip(dist_x, dist_y) if y > 0]
 						max_dist_x = max(max(filt)+dist_binsize/2,max_dist_x)
 						min_dist_x = min(min(filt)-dist_binsize/2,min_dist_x)
-						data.append(go.Histogram(histfunc = "sum", x=dist_x, y=dist_y, text=dist_text, opacity=partial_opacity, marker=dict(color=colors[idx]), xbins=dict(size=dist_binsize), showlegend=False, legendgroup=legendName, name = legendName))	
+						data.append(go.Histogram(histfunc = "sum", x=dist_x, y=dist_y, text=dist_text, opacity=partial_opacity, marker=dict(color=DEFAULT_PLOTLY_COLORS[idx%10]), xbins=dict(size=dist_binsize), showlegend=False, legendgroup=legendName, name = legendName))	
 
 			allFigures.append(
 				dcc.Graph(figure=dict(

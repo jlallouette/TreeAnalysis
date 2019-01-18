@@ -107,7 +107,10 @@ class DashInterfacable(Interfacable):
 		self._customLayouts[name] = layout
 
 	def _getDropDownValName(self, av, cls, defaultTypes):
-		return str(av) if cls in defaultTypes else av.__name__
+		if cls == list:
+			return av
+		else:
+			return str(av) if cls in defaultTypes else av.__name__
 
 	# Generate the callback function that will be called upon modifications of fields
 	def _generateFieldCallback(self):
@@ -161,7 +164,8 @@ class DashInterfacable(Interfacable):
 
 	def _generateUseCallback(self):
 		def CallMethods(*values):
-			for v, ufd in zip(values, self._useData):
+			specifUseData = [ud for ud in self._useData if ud.clickData.outputName is None]
+			for v, ufd in zip(values, specifUseData):
 				if v is not None and v > 0:
 					ufd.clickData.func(ufd.obj)
 			fullLayout = self.GetLayout()
@@ -246,7 +250,7 @@ class DashInterfacable(Interfacable):
 		print('getting Layout for {}'.format(self))
 		params = []
 		uses = []
-		defaultTypes = [str, int, bool, float, tuple, range, ReferenceHolder]
+		defaultTypes = [str, int, bool, float, tuple, range, ReferenceHolder, list]
 
 		# First display self parameters
 		if isinstance(self, Parameterizable):
@@ -270,12 +274,12 @@ class DashInterfacable(Interfacable):
 
 				# Make a dropdown in case several authorized values are available
 				if authVals is not None:
-					if (cls in defaultTypes and currVal not in authVals) or (cls not in defaultTypes and currVal.__class__ not in authVals):
+					if (cls in defaultTypes and currVal not in authVals) or (cls != list and cls not in defaultTypes and currVal.__class__ not in authVals):
 						if isinstance(currVal, ReferenceHolder) and currVal.value is None:
 							# Special case of reference holder
 							currVal = authVals[0]
 							setattr(self, name, currVal)
-						else:
+						elif not (isinstance(currVal, list) and all(v in authVals for v in currVal)):
 							# Otherwise
 							raise ValueError('{} is not part of the authorized values: {}'.format(currVal, authVals))
 					params.append(
@@ -286,7 +290,8 @@ class DashInterfacable(Interfacable):
 							options=[{'label': self._getDropDownValName(av, cls, defaultTypes),
 									'value': self._getDropDownValName(av, cls, defaultTypes)} for av in authVals], 
 							value=self._getDropDownValName(currVal, cls, defaultTypes) if cls in defaultTypes else currVal.__class__.__name__,
-							clearable=False
+							clearable=False,
+							multi=(cls == list)
 						)]))
 					if self._fillFieldData:
 						self._fieldData.append(DashFieldData(elemId, 'value', self, name))

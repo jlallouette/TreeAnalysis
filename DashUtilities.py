@@ -371,11 +371,12 @@ class DashInterfacable(Interfacable):
 
 # Abstract Base Class for dash layouts
 class DashLayout(ABC):
-	def __init__(self, id=None):
+	def __init__(self, id=None, maxNbElem = math.inf):
 		if id is None:
 			self.id = str(random.random())
 		else:
 			self.id = id
+		self.maxNbElem = maxNbElem
 
 	@abstractmethod
 	def GetLayout(self, elems, style={}):
@@ -383,8 +384,8 @@ class DashLayout(ABC):
 
 # Horizontal layout
 class DashHorizontalLayout(DashLayout):
-	def __init__(self, widthFunc = lambda ind, tot:int(100/(tot+0.001)), id=None):
-		DashLayout.__init__(self, id=id)
+	def __init__(self, widthFunc = lambda ind, tot:int(100/(tot+0.001)), id=None, maxNbElem = math.inf):
+		DashLayout.__init__(self, id=id, maxNbElem=maxNbElem)
 		self.widthFunc = widthFunc
 
 	def GetLayout(self, elems, style={}):
@@ -403,16 +404,21 @@ class DashHorizontalLayout(DashLayout):
 
 # Vertical layout
 class DashVerticalLayout(DashLayout):
-	def __init__(self, id=None):
-		DashLayout.__init__(self, id=id)
+	def __init__(self, id=None, maxNbElem = math.inf):
+		DashLayout.__init__(self, id=id, maxNbElem=maxNbElem)
 
 	def GetLayout(self, elems, style={}):
+		for e in elems:
+			if not hasattr(e, 'style'):
+				e.style = {}
+			if 'display' not in e.style or e.style['display'] != 'none':
+				e.style['display'] = 'block'
 		return html.Div(elems, style=style, id=self.id) if len(style) > 0 else html.Div(elems, id=self.id)
 
 
 class DashGridLayout(DashVerticalLayout):
-	def __init__(self, columns = 2, id=None):
-		DashVerticalLayout.__init__(self, id=id)
+	def __init__(self, columns = 2, id=None, maxNbElem = math.inf):
+		DashVerticalLayout.__init__(self, id=id, maxNbElem=maxNbElem)
 		self.columns = columns
 
 	def GetLayout(self, elems, style={}):
@@ -426,4 +432,38 @@ class DashGridLayout(DashVerticalLayout):
 					row.append(elems[ind])
 			rows.append(DashHorizontalLayout().GetLayout(row, style=style))
 		return DashVerticalLayout.GetLayout(self, rows, style=style)
+
+# Composite layout allowing more intricate positioning
+class DashStructSeqLayout(DashLayout):
+	def __init__(self, id=None, layoutStructure=None):
+		DashLayout.__init__(self, id=id)
+		if isinstance(layoutStructure, tuple):
+			self.layout, child = layoutStructure
+			if isinstance(child, list):
+				self.subLayouts = [DashStructSeqLayout(layoutStructure=c) for c in child]
+				self.maxNbElem = sum(sl.maxNbElem for sl in self.subLayouts)
+			else:
+				raise ValueError('The second element of the layoutStructure tuple must be a list of children.')
+		elif isinstance(layoutStructure, DashLayout):
+			self.layout = layoutStructure
+			self.subLayouts = []
+			self.maxNbElem = layoutStructure.maxNbElem
+		else:
+			raise ValueError('The layoutStructure parameter must either be a tuple or a DashLayout.')
+		# Structure is given through a tuple in which the first element is the parent and the second a list of childs (each described as tuples)
+
+	def GetLayout(self, elems, style={}):
+		currInd = 0
+		subElems = []
+		if len(self.subLayouts) > 0:
+			for sl in self.subLayouts:
+				nextInd = min(currInd + sl.maxNbElem, len(elems))
+				subElems.append(sl.GetLayout(elems[currInd:nextInd], style=style))
+				currInd = nextInd
+				if currInd >= len(elems):
+					break
+		else:
+			subElems = elems
+		return self.layout.GetLayout(subElems, style=style)
+	
 	

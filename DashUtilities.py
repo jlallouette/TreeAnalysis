@@ -174,7 +174,10 @@ class DashInterfacable(Interfacable):
 
 	def _generateTargetedUseCallback(self, ud):
 		def CallMethods(value):
-			return ud.clickData.func(ud.obj)
+			if value is not None and value > 0:
+				return ud.clickData.func(ud.obj)
+			else:
+				raise dash.exceptions.PreventUpdate
 		return CallMethods
 
 	def _generateDropDownCallback(self, obj):

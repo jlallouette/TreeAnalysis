@@ -293,7 +293,7 @@ class DashInterfacable(Interfacable):
 							options=[{'label': self._getDropDownValName(av, cls, defaultTypes),
 									'value': self._getDropDownValName(av, cls, defaultTypes)} for av in authVals], 
 							value=self._getDropDownValName(currVal, cls, defaultTypes) if cls in defaultTypes else currVal.__class__.__name__,
-							clearable=False,
+							clearable=isinstance(currVal, list),
 							multi=(cls == list)
 						)]))
 					if self._fillFieldData:

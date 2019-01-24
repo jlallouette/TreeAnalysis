@@ -273,7 +273,7 @@ class DashInterfacable(Interfacable):
 					cls = type(currVal)
 				# Raise exceptions if the currentValue is not of the correct class
 				if not issubclass(type(currVal), cls):
-					raise ValueError('{} is not of the correct type / class: {}'.format(currVal, cls.__name__))
+					raise ValueError('For attribute {}: {} is not of the correct type / class: {}'.format(name, currVal, cls.__name__))
 
 				# Make a dropdown in case several authorized values are available
 				if authVals is not None:

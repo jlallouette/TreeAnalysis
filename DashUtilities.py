@@ -40,12 +40,13 @@ def getDCCElemForType(elemId, name, cls, val):
 
 # Small structures responsible for signal mapping
 class DashFieldData:
-	def __init__(self, elemId, fieldName, obj, attrName, subKey=None):
+	def __init__(self, elemId, fieldName, obj, attrName, subKey=None, hasBlurProp = False):
 		self.id = elemId
 		self.fieldName = fieldName
 		self.obj = obj
 		self.attrName = attrName
 		self.subKey = subKey
+		self.hasBlurProp = hasBlurProp
 
 class DashUseData:
 	def __init__(self, elemId, fieldName, obj, clickData):
@@ -115,6 +116,8 @@ class DashInterfacable(Interfacable):
 	# Generate the callback function that will be called upon modifications of fields
 	def _generateFieldCallback(self):
 		def UpdateValues(*values):
+			# Discard the n_blur inputs
+			values = values[len(values)//2:]
 			# First update all values
 			oneUpdt = False
 			for v, dfd in zip(values, self._fieldData):
@@ -210,8 +213,9 @@ class DashInterfacable(Interfacable):
 		anyChangeInputs = []
 
 		# First handle signals linked with own fields
-		allInputs = [Input(fd.id, fd.fieldName) for fd in self._fieldData]
-		app.callback(Output(self._uselessDivIds['all'], 'children'), allInputs)(self._generateFieldCallback())
+		allInputs = [Input(fd.id, 'n_blur' if fd.hasBlurProp else fd.fieldName) for fd in self._fieldData]
+		allStates = [State(fd.id, fd.fieldName) for fd in self._fieldData]
+		app.callback(Output(self._uselessDivIds['all'], 'children'), allInputs, allStates)(self._generateFieldCallback())
 
 		anyChangeInputs.append(Input(self._uselessDivIds['all'], 'children'))
 
@@ -297,7 +301,7 @@ class DashInterfacable(Interfacable):
 							multi=(cls == list)
 						)]))
 					if self._fillFieldData:
-						self._fieldData.append(DashFieldData(elemId, 'value', self, name))
+						self._fieldData.append(DashFieldData(elemId, 'value', self, name, None, False))
 				# If the value has a default type
 				elif cls in defaultTypes:
 					elem, elemIdsFieldNames = getDCCElemForType(elemId, name, cls, currVal)
@@ -305,7 +309,7 @@ class DashInterfacable(Interfacable):
 
 					if self._fillFieldData:
 						for eifd in elemIdsFieldNames:
-							self._fieldData.append(DashFieldData(eifd[0], eifd[1], self, name, eifd[2] if len(eifd) > 2 else None))
+							self._fieldData.append(DashFieldData(eifd[0], eifd[1], self, name, eifd[2] if len(eifd) > 2 else None, type(getattr(self, name)) != bool))
 
 				# If there are subparams to be displayed
 				subLayouts = []
